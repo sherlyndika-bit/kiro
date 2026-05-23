@@ -60,37 +60,28 @@
     },
     {
       "parameters": {
-        "model": "llama-3.3-70b-versatile",
-        "messages": {
-          "values": [
-            {
-              "role": "system",
-              "content": "Kamu adalah AI classifier untuk bisnis jasa desain arsitektur & interior bernama Sudut Ruang.\n\nTugasmu: Analisis pesan WhatsApp dari calon klien dan tentukan intent + ekstrak data.\n\nKembalikan HANYA JSON valid tanpa penjelasan apapun.\n\nFormat response:\n{\n  \"intent\": \"GREETING\" | \"ASK_PRICE\" | \"REQUEST_PROPOSAL\" | \"FOLLOW_UP\" | \"GENERAL_QUESTION\" | \"OTHER\",\n  \"confidence\": 0.0-1.0,\n  \"extracted\": {\n    \"building_type\": \"rumah\" | \"cafe\" | \"restoran\" | \"kantor\" | \"villa\" | \"ruko\" | \"renovasi\" | null,\n    \"tier\": \"ekonomi\" | \"standar\" | \"menengah\" | \"premium\" | null,\n    \"area_sqm\": number | null,\n    \"service_type\": \"arsitektur\" | \"interior\" | \"komersial\" | \"lansekap\" | \"pengawasan\" | null,\n    \"client_name_mentioned\": string | null\n  },\n  \"needs_human\": false,\n  \"reason\": \"singkat kenapa intent ini\"\n}\n\nContoh:\n- \"Halo kak mau tanya harga\" -> GREETING\n- \"Berapa biaya desain cafe 80m2\" -> ASK_PRICE, cafe, 80\n- \"Bisa dibuatkan proposal?\" -> REQUEST_PROPOSAL\n- \"Kapan bisa survey?\" -> GENERAL_QUESTION, needs_human: true\n- \"Komplen soal hasil kerja\" -> OTHER, needs_human: true"
-            },
-            {
-              "role": "user",
-              "content": "={{ $json.text }}"
-            }
-          ]
-        },
-        "options": {
-          "temperature": 0.1,
-          "maxTokens": 300
-        }
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"temperature\": 0.1,\n  \"max_tokens\": 300,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Kamu adalah AI classifier untuk bisnis jasa desain arsitektur & interior bernama Sudut Ruang.\\n\\nTugasmu: Analisis pesan WhatsApp dari calon klien dan tentukan intent + ekstrak data.\\n\\nKembalikan HANYA JSON valid tanpa penjelasan apapun.\\n\\nFormat response:\\n{\\n  \\\"intent\\\": \\\"GREETING\\\" | \\\"ASK_PRICE\\\" | \\\"REQUEST_PROPOSAL\\\" | \\\"FOLLOW_UP\\\" | \\\"GENERAL_QUESTION\\\" | \\\"OTHER\\\",\\n  \\\"confidence\\\": 0.0-1.0,\\n  \\\"extracted\\\": {\\n    \\\"building_type\\\": \\\"rumah\\\" | \\\"cafe\\\" | \\\"restoran\\\" | \\\"kantor\\\" | \\\"villa\\\" | \\\"ruko\\\" | \\\"renovasi\\\" | null,\\n    \\\"tier\\\": \\\"ekonomi\\\" | \\\"standar\\\" | \\\"menengah\\\" | \\\"premium\\\" | null,\\n    \\\"area_sqm\\\": number | null,\\n    \\\"service_type\\\": \\\"arsitektur\\\" | \\\"interior\\\" | \\\"komersial\\\" | \\\"lansekap\\\" | \\\"pengawasan\\\" | null,\\n    \\\"client_name_mentioned\\\": string | null\\n  },\\n  \\\"needs_human\\\": false,\\n  \\\"reason\\\": \\\"singkat kenapa intent ini\\\"\\n}\\n\\nContoh:\\n- \\\"Halo kak mau tanya harga\\\" -> GREETING\\n- \\\"Berapa biaya desain cafe 80m2\\\" -> ASK_PRICE, cafe, 80\\n- \\\"Bisa dibuatkan proposal?\\\" -> REQUEST_PROPOSAL\\n- \\\"Kapan bisa survey?\\\" -> GENERAL_QUESTION, needs_human: true\\n- \\\"Komplen soal hasil kerja\\\" -> OTHER, needs_human: true\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.text) }}\n    }\n  ]\n}",
+        "options": {}
       },
       "id": "groq-classifier",
       "name": "Groq — Classify Intent",
-      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [900, 300],
       "credentials": {
-        "groqApi": { "id": "groq-cred", "name": "Groq API" }
+        "httpHeaderAuth": { "id": "groq-header-cred", "name": "Groq API Header" }
       },
-      "notes": "Setup credentials: Settings > Credentials > New > Groq API\nAPI Key dari https://console.groq.com"
+      "notes": "Credentials: HTTP Header Auth\nName: Authorization\nValue: Bearer gsk_XXXXXXXXXXXXXXXX\n(API Key dari https://console.groq.com)"
     },
     {
       "parameters": {
-        "jsCode": "// Parse JSON response dari Groq\nconst raw = $input.first().json.content || $input.first().json.text || '';\n\nlet classification;\ntry {\n  // Bersihkan markdown jika ada\n  const cleaned = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  classification = JSON.parse(cleaned);\n} catch (e) {\n  // Fallback jika parse gagal\n  classification = {\n    intent: 'OTHER',\n    confidence: 0.5,\n    extracted: {},\n    needs_human: true,\n    reason: 'Failed to parse AI response'\n  };\n}\n\n// Merge dengan data pesan sebelumnya\nconst messageData = $('Parse Meta Payload').first().json;\n\nreturn [{\n  json: {\n    ...messageData,\n    intent: classification.intent,\n    confidence: classification.confidence,\n    extracted: classification.extracted || {},\n    needs_human: classification.needs_human || false,\n    classifierReason: classification.reason\n  }\n}];"
+        "jsCode": "// Parse JSON response dari Groq HTTP API\n// Response format: { choices: [{ message: { content: '...' } }] }\nconst groqResponse = $input.first().json;\nconst raw = groqResponse?.choices?.[0]?.message?.content || '';\n\nlet classification;\ntry {\n  // Bersihkan markdown code block jika ada\n  const cleaned = raw\n    .replace(/```json\\n?/g, '')\n    .replace(/```\\n?/g, '')\n    .trim();\n  classification = JSON.parse(cleaned);\n} catch (e) {\n  // Fallback jika parse gagal\n  classification = {\n    intent: 'OTHER',\n    confidence: 0.5,\n    extracted: {},\n    needs_human: true,\n    reason: 'Failed to parse AI response: ' + e.message\n  };\n}\n\n// Ambil data pesan asli dari node sebelumnya\nconst messageData = $('Parse Meta Payload').first().json;\n\nreturn [{\n  json: {\n    ...messageData,\n    intent: classification.intent || 'OTHER',\n    confidence: classification.confidence || 0.5,\n    extracted: classification.extracted || {},\n    needs_human: classification.needs_human || false,\n    classifierReason: classification.reason || ''\n  }\n}];"
       },
       "id": "parse-classification",
       "name": "Parse Classification Result",
@@ -349,7 +340,11 @@
       "main": [[{ "node": "Has Reply Text?", "type": "main", "index": 0 }]]
     },
     "Flag for Human Review": {
-      "main": [[{ "node": "Notify Dashboard", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          { "node": "Notify Dashboard", "type": "main", "index": 0 }
+        ]
+      ]
     },
     "Has Reply Text?": {
       "main": [
@@ -357,7 +352,9 @@
           { "node": "Send WA Reply", "type": "main", "index": 0 },
           { "node": "Notify Dashboard", "type": "main", "index": 0 }
         ],
-        [{ "node": "Trigger Workflow 2 — Estimator", "type": "main", "index": 0 }]
+        [
+          { "node": "Trigger Workflow 2 — Estimator", "type": "main", "index": 0 }
+        ]
       ]
     }
   },
