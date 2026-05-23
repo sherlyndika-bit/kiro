@@ -1,97 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Conversation, Message, ConversationMode } from '../types/chat'
 import { ChatService, mockConversations, quickReplies } from '../services/chatService'
-import TakeOverNotification from '../components/TakeOverNotification'
-import ModeToggleModal from '../components/ModeToggleModal'
-
-interface TakeOverAlert {
-  id: string
-  conversationId: string
-  clientName: string
-  reason: string
-  aiConfidence: number
-  timestamp: Date
-  priority: 'low' | 'medium' | 'high'
-}
 
 const ChatMonitoring: React.FC = () => {
   const [conversations, setConversations] = useState<Conversation[]>(mockConversations)
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(mockConversations[0])
   const [messageInput, setMessageInput] = useState('')
-  const [filterSource, setFilterSource] = useState<'all' | 'whatsapp' | 'instagram'>('all')
-  const [showQuickReplies, setShowQuickReplies] = useState(false)
-  const [alerts, setAlerts] = useState<TakeOverAlert[]>([])
-  const [showModeModal, setShowModeModal] = useState(false)
-  const [pendingModeChange, setPendingModeChange] = useState<{ convId: string; mode: ConversationMode } | null>(null)
+  const [autoMode, setAutoMode] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [selectedConv?.messages])
 
-  // Polling untuk update real-time (nanti bisa diganti WebSocket)
   useEffect(() => {
-    const interval = setInterval(async () => {
-      const updated = await ChatService.getConversations()
-      setConversations(updated)
-      
-      // Check for AI confidence issues and generate alerts
-      checkForAlerts(updated)
-    }, 3000)
+    if (selectedConv) setAutoMode(selectedConv.mode === 'ai')
+  }, [selectedConv?.id])
 
-    return () => clearInterval(interval)
-  }, [])
-
-  // Check messages that need human intervention
-  const checkForAlerts = (convs: Conversation[]) => {
-    const newAlerts: TakeOverAlert[] = []
-
-    convs.forEach((conv) => {
-      if (conv.mode === 'manual') return // Skip manual conversations
-
-      conv.messages.forEach((msg) => {
-        if (msg.role === 'ai' && msg.aiConfidence && msg.aiConfidence < 0.7) {
-          const existingAlert = alerts.find((a) => a.conversationId === conv.id)
-          if (!existingAlert) {
-            newAlerts.push({
-              id: `alert-${conv.id}-${Date.now()}`,
-              conversationId: conv.id,
-              clientName: conv.clientName,
-              reason: 'AI confidence is low. Complex question detected.',
-              aiConfidence: msg.aiConfidence,
-              timestamp: new Date(),
-              priority: msg.aiConfidence < 0.5 ? 'high' : 'medium',
-            })
-          }
-        }
-
-        if (msg.metadata?.needsHumanReview) {
-          const existingAlert = alerts.find((a) => a.conversationId === conv.id)
-          if (!existingAlert) {
-            newAlerts.push({
-              id: `alert-${conv.id}-${Date.now()}`,
-              conversationId: conv.id,
-              clientName: conv.clientName,
-              reason: 'Message flagged for human review',
-              aiConfidence: msg.aiConfidence || 0.5,
-              timestamp: new Date(),
-              priority: 'high',
-            })
-          }
-        }
-      })
-    })
-
-    if (newAlerts.length > 0) {
-      setAlerts((prev) => [...prev, ...newAlerts])
-    }
-  }
-
-  const filteredConversations = conversations.filter((conv) => {
-    if (filterSource === 'all') return true
-    return conv.source === filterSource
-  })
+  const onlineCount = conversations.filter((c) => c.status === 'active').length
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !selectedConv) return
@@ -100,12 +26,12 @@ const ChatMonitoring: React.FC = () => {
       id: `msg-${Date.now()}`,
       conversationId: selectedConv.id,
       content: messageInput,
-      role: selectedConv.mode === 'ai' ? 'ai' : 'human',
+      role: autoMode ? 'ai' : 'human',
       timestamp: new Date(),
       source: selectedConv.source,
+      aiConfidence: autoMode ? 0.95 : undefined,
     }
 
-    // Update local state
     const updatedConv = {
       ...selectedConv,
       messages: [...selectedConv.messages, newMessage],
@@ -114,389 +40,472 @@ const ChatMonitoring: React.FC = () => {
     }
 
     setSelectedConv(updatedConv)
-    setConversations(
-      conversations.map((c) => (c.id === selectedConv.id ? updatedConv : c))
-    )
-
-    // Send via n8n
-    await ChatService.sendMessage(
-      selectedConv.id,
-      messageInput,
-      selectedConv.mode === 'ai',
-      selectedConv
-    )
+    setConversations(conversations.map((c) => (c.id === selectedConv.id ? updatedConv : c)))
+    await ChatService.sendMessage(selectedConv.id, messageInput, autoMode, selectedConv)
     setMessageInput('')
   }
 
-  const handleToggleMode = (convId: string, newMode: ConversationMode) => {
-    setPendingModeChange({ convId, mode: newMode })
-    setShowModeModal(true)
+  const handleTakeOver = async () => {
+    if (!selectedConv) return
+    const newMode: ConversationMode = autoMode ? 'manual' : 'ai'
+    setAutoMode(!autoMode)
+
+    const updated = { ...selectedConv, mode: newMode }
+    setSelectedConv(updated)
+    setConversations(conversations.map((c) => (c.id === selectedConv.id ? updated : c)))
+    await ChatService.toggleMode(selectedConv.id, newMode)
   }
 
-  const confirmModeToggle = async () => {
-    if (!pendingModeChange) return
+  const insertQuickReply = (content: string) => setMessageInput(content)
 
-    const { convId, mode: newMode } = pendingModeChange
-    const conv = conversations.find((c) => c.id === convId)
-    if (!conv) return
-
-    const updated = {
-      ...conv,
-      mode: newMode,
-      humanOperator: newMode === 'manual' ? 'You' : undefined,
-    }
-
-    setConversations(conversations.map((c) => (c.id === convId ? updated : c)))
-    if (selectedConv?.id === convId) setSelectedConv(updated)
-
-    await ChatService.toggleMode(convId, newMode)
-    
-    // Remove alert if exists
-    setAlerts(alerts.filter((a) => a.conversationId !== convId))
-    
-    setShowModeModal(false)
-    setPendingModeChange(null)
-  }
-
-  const handleTakeOverFromAlert = (conversationId: string) => {
-    const conv = conversations.find((c) => c.id === conversationId)
-    if (!conv) return
-
-    // Switch to conversation
-    setSelectedConv(conv)
-
-    // Trigger mode change
-    handleToggleMode(conversationId, 'manual')
-  }
-
-  const handleDismissAlert = (alertId: string) => {
-    setAlerts(alerts.filter((a) => a.id !== alertId))
-  }
-
-  const insertQuickReply = (content: string) => {
-    setMessageInput(content)
-    setShowQuickReplies(false)
-  }
-
-  const getSourceIcon = (source: string) => {
+  const getSourceBadge = (source: string) => {
     switch (source) {
       case 'whatsapp':
-        return '💬'
+        return { letter: 'W', color: 'bg-green-500' }
       case 'instagram':
-        return '📸'
+        return { letter: 'I', color: 'bg-pink-500' }
       default:
-        return '🌐'
+        return { letter: '?', color: 'bg-gray-500' }
     }
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-500'
-      case 'idle':
-        return 'bg-yellow-500'
-      default:
-        return 'bg-gray-400'
+  const getStatusLabel = (conv: Conversation) => {
+    if (conv.mode === 'manual')
+      return {
+        label: 'Human Active',
+        className: 'bg-error-container text-on-error-container',
+      }
+    const needsHuman = conv.messages.some((m) => m.metadata?.needsHumanReview)
+    if (needsHuman)
+      return {
+        label: 'Human Needed',
+        className: 'bg-error-container text-on-error-container',
+      }
+    if (conv.status === 'idle')
+      return {
+        label: 'Resolved',
+        className: 'border border-outline text-outline',
+      }
+    return {
+      label: 'AI Handled',
+      className: 'bg-secondary-container text-on-secondary-container',
     }
+  }
+
+  const formatTimeAgo = (date: Date) => {
+    const mins = Math.floor((Date.now() - date.getTime()) / 60000)
+    if (mins < 1) return 'now'
+    if (mins < 60) return `${mins}m ago`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return `${hours}h ago`
+    return `${Math.floor(hours / 24)}d ago`
   }
 
   return (
-    <>
-      {/* Take Over Notifications */}
-      <TakeOverNotification
-        alerts={alerts}
-        onTakeOver={handleTakeOverFromAlert}
-        onDismiss={handleDismissAlert}
-      />
-
-      {/* Mode Toggle Confirmation Modal */}
-      {showModeModal && selectedConv && (
-        <ModeToggleModal
-          isOpen={showModeModal}
-          currentMode={selectedConv.mode}
-          clientName={selectedConv.clientName}
-          onConfirm={confirmModeToggle}
-          onCancel={() => {
-            setShowModeModal(false)
-            setPendingModeChange(null)
-          }}
-        />
-      )}
-
-      <div className="flex h-screen bg-gray-50">
-      {/* Conversations List */}
-      <div className="w-96 bg-white border-r border-gray-200 flex flex-col">
-        {/* Header */}
-        <div className="p-4 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Chat Monitoring</h2>
-          
-          {/* Filter Tabs */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setFilterSource('all')}
-              className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                filterSource === 'all'
-                  ? 'bg-primary text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              All ({conversations.length})
-            </button>
-            <button
-              onClick={() => setFilterSource('whatsapp')}
-              className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                filterSource === 'whatsapp'
-                  ? 'bg-green-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              💬 WA
-            </button>
-            <button
-              onClick={() => setFilterSource('instagram')}
-              className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                filterSource === 'instagram'
-                  ? 'bg-pink-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              📸 IG
-            </button>
+    <div className="flex-1 flex overflow-hidden">
+      {/* Column 1: Chat List */}
+      <section className="w-80 border-r border-outline-variant bg-surface-container-lowest flex flex-col">
+        <div className="p-md border-b border-outline-variant">
+          <div className="flex items-center justify-between mb-sm">
+            <span className="font-label-caps text-label-caps text-outline uppercase">
+              Active Streams
+            </span>
+            <span className="font-mono-label text-mono-label bg-primary-container text-on-primary-container px-2 py-1 rounded">
+              {onlineCount} Online
+            </span>
           </div>
         </div>
 
-        {/* Conversations List */}
         <div className="flex-1 overflow-y-auto">
-          {filteredConversations.map((conv) => (
-            <div
-              key={conv.id}
-              onClick={() => setSelectedConv(conv)}
-              className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
-                selectedConv?.id === conv.id ? 'bg-blue-50 border-l-4 border-primary' : ''
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                {/* Avatar */}
-                <div className="relative">
-                  <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
-                    {conv.clientName.charAt(0)}
-                  </div>
-                  <div className={`absolute bottom-0 right-0 w-3 h-3 ${getStatusColor(conv.status)} rounded-full border-2 border-white`}></div>
-                </div>
+          {conversations.map((conv) => {
+            const badge = getSourceBadge(conv.source)
+            const status = getStatusLabel(conv)
+            const isActive = selectedConv?.id === conv.id
+            const needsHuman = conv.messages.some((m) => m.metadata?.needsHumanReview)
+            const isResolved = conv.status === 'idle' && conv.mode === 'ai'
 
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-gray-900 truncate">
+            return (
+              <div
+                key={conv.id}
+                onClick={() => setSelectedConv(conv)}
+                className={`p-md border-b border-outline-variant transition-colors cursor-pointer group ${
+                  isActive
+                    ? 'bg-surface-container'
+                    : 'hover:bg-surface-container-low'
+                } ${needsHuman ? 'border-l-4 border-l-error' : ''}`}
+              >
+                <div className={`flex items-start gap-sm ${isResolved ? 'opacity-60' : ''}`}>
+                  <div className="relative">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-fixed to-secondary-fixed flex items-center justify-center text-primary font-bold">
+                      {conv.clientName.charAt(0).toUpperCase()}
+                    </div>
+                    <div
+                      className={`absolute -bottom-1 -right-1 ${badge.color} w-4 h-4 rounded-full border-2 border-white flex items-center justify-center`}
+                    >
+                      <span className="text-[10px] text-white font-bold">{badge.letter}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-headline-sm text-[14px] font-bold text-on-background truncate">
                         {conv.clientName}
                       </span>
-                      <span className="text-lg">{getSourceIcon(conv.source)}</span>
+                      <span
+                        className={`font-label-caps text-[10px] ${
+                          needsHuman ? 'text-error font-bold' : 'text-outline'
+                        }`}
+                      >
+                        {needsHuman ? 'Priority' : formatTimeAgo(conv.lastMessageTime)}
+                      </span>
                     </div>
-                    <span className="text-xs text-gray-500">
-                      {Math.floor((Date.now() - conv.lastMessageTime.getTime()) / 60000)}m
-                    </span>
-                  </div>
-
-                  <p className="text-sm text-gray-600 truncate mb-2">{conv.lastMessage}</p>
-
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full font-medium ${
-                        conv.mode === 'ai'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-orange-100 text-orange-700'
+                    <p
+                      className={`text-body-md text-on-surface-variant line-clamp-1 ${
+                        needsHuman ? 'font-bold' : ''
                       }`}
                     >
-                      {conv.mode === 'ai' ? '🤖 AI Mode' : '👤 Manual'}
-                    </span>
-                    {conv.unreadCount > 0 && (
-                      <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                        {conv.unreadCount}
+                      {conv.lastMessage}
+                    </p>
+                    <div className="mt-2 flex items-center gap-xs">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter ${status.className}`}
+                      >
+                        {status.label}
                       </span>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
-      </div>
+      </section>
 
-      {/* Chat Area */}
-      {selectedConv ? (
-        <div className="flex-1 flex flex-col">
-          {/* Chat Header */}
-          <div className="bg-white border-b border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
-                  {selectedConv.clientName.charAt(0)}
+      {/* Column 2: Chat Window */}
+      <section className="flex-1 flex flex-col bg-white min-w-0">
+        {selectedConv ? (
+          <>
+            {/* Chat Header */}
+            <div className="px-gutter h-16 border-b border-outline-variant flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-sm">
+                <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">
+                  <span className="material-symbols-outlined text-primary">person</span>
                 </div>
                 <div>
-                  <h3 className="font-bold text-gray-900">{selectedConv.clientName}</h3>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <span>{selectedConv.metadata.phoneNumber || selectedConv.metadata.igUsername}</span>
-                    <span>•</span>
-                    <span>{selectedConv.metadata.projectType || 'No project'}</span>
-                  </div>
+                  <h3 className="font-headline-sm text-[16px] font-bold leading-tight">
+                    {selectedConv.clientName}
+                  </h3>
+                  <p className="text-label-caps text-[11px] text-outline">
+                    {selectedConv.source === 'whatsapp' ? 'WhatsApp' : 'Instagram'} • ID:{' '}
+                    {selectedConv.id.toUpperCase()}
+                  </p>
                 </div>
               </div>
 
-              {/* Mode Toggle */}
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-gray-700">Mode:</span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleToggleMode(selectedConv.id, 'ai')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      selectedConv.mode === 'ai'
-                        ? 'bg-blue-500 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    🤖 AI
-                  </button>
-                  <button
-                    onClick={() => handleToggleMode(selectedConv.id, 'manual')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      selectedConv.mode === 'manual'
-                        ? 'bg-orange-500 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    👤 Manual
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Alert Banner */}
-            {selectedConv.mode === 'manual' && (
-              <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                <p className="text-sm text-orange-800">
-                  ⚠️ <strong>Manual Mode Active</strong> - AI responses disabled. You're now handling this conversation.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-            {selectedConv.messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`mb-4 flex ${msg.role === 'client' ? 'justify-start' : 'justify-end'}`}
-              >
+              <div className="flex items-center gap-md">
                 <div
-                  className={`max-w-md px-4 py-3 rounded-lg ${
-                    msg.role === 'client'
-                      ? 'bg-white border border-gray-200'
-                      : msg.role === 'ai'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-orange-500 text-white'
+                  className={`flex items-center gap-xs px-3 py-1.5 rounded-full border ${
+                    autoMode
+                      ? 'bg-emerald-50 border-emerald-100'
+                      : 'bg-orange-50 border-orange-200'
                   }`}
                 >
-                  {msg.role !== 'client' && (
-                    <div className="text-xs opacity-75 mb-1">
-                      {msg.role === 'ai' ? '🤖 AI Agent' : '👤 Human'}
-                      {msg.aiConfidence && ` (${Math.round(msg.aiConfidence * 100)}% confident)`}
-                    </div>
-                  )}
-                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                  <div className="text-xs opacity-75 mt-1">
-                    {msg.timestamp.toLocaleTimeString('id-ID', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </div>
-                  {msg.metadata?.needsHumanReview && (
-                    <div className="mt-2 pt-2 border-t border-red-300">
-                      <span className="text-xs font-semibold">⚠️ Needs Human Review</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input Area */}
-          <div className="bg-white border-t border-gray-200 p-4">
-            {/* Quick Replies */}
-            {showQuickReplies && (
-              <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200 max-h-48 overflow-y-auto">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-semibold text-gray-700">Quick Replies</span>
-                  <button
-                    onClick={() => setShowQuickReplies(false)}
-                    className="text-gray-500 hover:text-gray-700"
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      autoMode ? 'bg-emerald-500' : 'bg-orange-500'
+                    }`}
+                  ></span>
+                  <span
+                    className={`text-label-caps uppercase font-bold ${
+                      autoMode ? 'text-emerald-700' : 'text-orange-700'
+                    }`}
                   >
-                    ✕
-                  </button>
+                    {autoMode ? 'AI Active' : 'Human Active'}
+                  </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {quickReplies.map((qr) => (
-                    <button
-                      key={qr.id}
-                      onClick={() => insertQuickReply(qr.content)}
-                      className="text-left p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="text-xs font-semibold text-gray-900 mb-1">{qr.title}</div>
-                      <div className="text-xs text-gray-600 truncate">{qr.content}</div>
-                    </button>
-                  ))}
+                <button className="p-2 hover:bg-surface-container rounded-full transition-colors">
+                  <span className="material-symbols-outlined text-outline">more_vert</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 p-gutter overflow-y-auto flex flex-col gap-lg bg-background/30">
+              <div className="flex justify-center">
+                <span className="px-3 py-1 bg-surface-container-low rounded-full text-label-caps text-outline uppercase">
+                  Today, {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+
+              {selectedConv.messages.map((msg) => {
+                if (msg.role === 'client') {
+                  return (
+                    <div key={msg.id} className="flex flex-col items-start max-w-[80%]">
+                      <div className="bg-white border border-outline-variant p-md rounded-xl rounded-tl-none shadow-sm">
+                        <p className="text-body-md text-on-background whitespace-pre-wrap">
+                          {msg.content}
+                        </p>
+                      </div>
+                      <span className="mt-1 text-label-caps text-[10px] text-outline ml-1">
+                        {msg.timestamp.toLocaleTimeString('en-US', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}{' '}
+                        • Delivered
+                      </span>
+                    </div>
+                  )
+                }
+                if (msg.role === 'ai') {
+                  return (
+                    <div key={msg.id} className="flex flex-col items-end max-w-[80%] self-end">
+                      <div className="message-gradient-ai border border-primary/5 p-md rounded-xl rounded-tr-none shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-1 opacity-20">
+                          <span className="material-symbols-outlined text-[14px]">smart_toy</span>
+                        </div>
+                        <p className="text-body-md text-on-background whitespace-pre-wrap">
+                          {msg.content}
+                        </p>
+                      </div>
+                      <div className="mt-1 flex items-center gap-xs mr-1">
+                        <span className="material-symbols-outlined text-[14px] text-secondary">
+                          bolt
+                        </span>
+                        <span className="text-label-caps text-[10px] text-secondary font-bold uppercase">
+                          AI Response
+                          {msg.aiConfidence
+                            ? ` • Confidence ${Math.round(msg.aiConfidence * 100)}%`
+                            : ''}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                }
+                // human
+                return (
+                  <div key={msg.id} className="flex flex-col items-end max-w-[80%] self-end">
+                    <div className="bg-primary text-on-primary p-md rounded-xl rounded-tr-none shadow-sm">
+                      <p className="text-body-md whitespace-pre-wrap">{msg.content}</p>
+                    </div>
+                    <div className="mt-1 flex items-center gap-xs mr-1">
+                      <span className="material-symbols-outlined text-[14px] text-on-surface-variant">
+                        person
+                      </span>
+                      <span className="text-label-caps text-[10px] text-on-surface-variant font-bold uppercase">
+                        Human Operator •{' '}
+                        {msg.timestamp.toLocaleTimeString('en-US', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input */}
+            <div className="p-md border-t border-outline-variant bg-white flex-shrink-0">
+              <div className="flex gap-sm mb-sm overflow-x-auto pb-2 no-scrollbar">
+                {quickReplies.slice(0, 4).map((qr) => (
+                  <button
+                    key={qr.id}
+                    onClick={() => insertQuickReply(qr.content)}
+                    className="whitespace-nowrap px-3 py-1.5 border border-outline-variant rounded-full text-label-caps text-on-surface-variant hover:border-primary transition-colors"
+                  >
+                    {qr.title}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-sm bg-surface-container-low rounded-xl px-md py-sm">
+                <button className="text-outline hover:text-primary">
+                  <span className="material-symbols-outlined">attach_file</span>
+                </button>
+                <textarea
+                  rows={1}
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSendMessage()
+                    }
+                  }}
+                  placeholder={
+                    autoMode
+                      ? 'AI is responding... type to override'
+                      : 'Type a message or select a quick reply...'
+                  }
+                  className="flex-1 bg-transparent border-none focus:ring-0 outline-none text-body-md resize-none py-1"
+                />
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!messageInput.trim()}
+                  className="bg-primary text-on-primary w-10 h-10 rounded-lg flex items-center justify-center hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-40"
+                >
+                  <span className="material-symbols-outlined">send</span>
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-outline">
+            <div className="text-center">
+              <span className="material-symbols-outlined text-6xl">chat</span>
+              <p className="mt-2 text-body-md">Select a conversation to start</p>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Column 3: Control Panel */}
+      <section className="w-[320px] bg-background border-l border-outline-variant p-gutter flex flex-col gap-md overflow-y-auto flex-shrink-0">
+        {/* System Mode */}
+        <div className="glass-card border border-outline-variant rounded-xl p-md">
+          <h4 className="font-label-caps text-label-caps text-outline uppercase mb-md">
+            System Control
+          </h4>
+          <div className="flex items-center justify-between p-sm bg-surface rounded-lg mb-sm">
+            <span className="text-body-md font-bold">Auto-Mode</span>
+            <button
+              onClick={handleTakeOver}
+              className={`w-12 h-6 rounded-full relative cursor-pointer shadow-inner transition-colors ${
+                autoMode ? 'bg-emerald-500' : 'bg-outline'
+              }`}
+            >
+              <div
+                className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-all ${
+                  autoMode ? 'right-1' : 'left-1'
+                }`}
+              ></div>
+            </button>
+          </div>
+          <button
+            onClick={handleTakeOver}
+            className="w-full py-3 bg-primary text-on-primary rounded-lg font-headline-sm text-[14px] font-bold uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all"
+          >
+            {autoMode ? 'Take Over Conversation' : 'Return to AI'}
+          </button>
+          <p className="mt-xs text-[10px] text-outline text-center">
+            AI will pause immediately if Take Over is engaged.
+          </p>
+        </div>
+
+        {/* AI Confidence */}
+        <div className="glass-card border border-outline-variant rounded-xl p-md">
+          <div className="flex justify-between items-center mb-md">
+            <h4 className="font-label-caps text-label-caps text-outline uppercase">
+              AI Confidence
+            </h4>
+            <span className="text-emerald-500 font-mono-label font-bold">85.4%</span>
+          </div>
+          <div className="relative pt-1">
+            <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-surface-container">
+              <div
+                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-emerald-500"
+                style={{ width: '85%' }}
+              ></div>
+            </div>
+          </div>
+          <div className="flex items-center gap-xs">
+            <span className="material-symbols-outlined text-[16px] text-emerald-500">verified</span>
+            <span className="text-body-md text-on-surface-variant">High Precision Threshold</span>
+          </div>
+        </div>
+
+        {/* Webhook */}
+        <div className="glass-card border border-outline-variant rounded-xl p-md">
+          <h4 className="font-label-caps text-label-caps text-outline uppercase mb-md">
+            Integrations
+          </h4>
+          <div className="flex items-center justify-between mb-sm">
+            <div className="flex items-center gap-xs">
+              <div className="w-8 h-8 rounded bg-primary text-white flex items-center justify-center font-black italic text-[10px]">
+                n8n
+              </div>
+              <span className="text-body-md font-bold">n8n Webhook</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+              <span className="text-[11px] font-bold text-emerald-600">Active</span>
+            </div>
+          </div>
+          <div className="p-xs bg-surface-container rounded font-mono-label text-[11px] text-outline truncate">
+            https://n8n.workflow.ai/v1/hooks/...
+          </div>
+        </div>
+
+        {/* Client Profile */}
+        <div className="glass-card border border-outline-variant rounded-xl p-md flex-1">
+          <h4 className="font-label-caps text-label-caps text-outline uppercase mb-md">
+            Client Profile
+          </h4>
+          {selectedConv ? (
+            <div className="space-y-md">
+              <div>
+                <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
+                  Lead Name
+                </span>
+                <p className="text-body-md font-bold">{selectedConv.clientName}</p>
+              </div>
+              <div>
+                <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
+                  Contact
+                </span>
+                <p className="text-body-md">
+                  {selectedConv.metadata.phoneNumber || selectedConv.metadata.igUsername || '-'}
+                </p>
+              </div>
+              <div>
+                <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
+                  Project
+                </span>
+                <div className="flex items-center gap-xs px-2 py-1 bg-surface-container rounded border border-outline-variant w-fit">
+                  <span className="material-symbols-outlined text-[14px]">account_tree</span>
+                  <span className="text-body-md text-on-surface-variant">
+                    {selectedConv.metadata.projectType || 'No project'}
+                  </span>
                 </div>
               </div>
-            )}
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowQuickReplies(!showQuickReplies)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                title="Quick Replies"
-              >
-                ⚡
-              </button>
-              <input
-                type="text"
-                value={messageInput}
-                onChange={(e) => setMessageInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                placeholder={
-                  selectedConv.mode === 'ai'
-                    ? 'AI is responding automatically...'
-                    : 'Type your message...'
-                }
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                disabled={selectedConv.mode === 'ai'}
-              />
-              <button
-                onClick={handleSendMessage}
-                disabled={!messageInput.trim() || selectedConv.mode === 'ai'}
-                className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Send
-              </button>
+              {selectedConv.metadata.estimatedValue && (
+                <div>
+                  <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
+                    Estimated Value
+                  </span>
+                  <p className="text-body-md font-bold text-secondary">
+                    {selectedConv.metadata.estimatedValue}
+                  </p>
+                </div>
+              )}
+              <div>
+                <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
+                  Last Sync
+                </span>
+                <p className="text-body-md">
+                  {selectedConv.lastMessageTime.toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </p>
+              </div>
             </div>
+          ) : (
+            <p className="text-body-md text-outline">No client selected</p>
+          )}
 
-            <div className="mt-2 text-xs text-gray-500">
-              {selectedConv.mode === 'ai'
-                ? '🤖 AI is handling this conversation. Switch to Manual mode to take over.'
-                : '👤 You are in control. Messages will be sent manually.'}
-            </div>
+          <div className="mt-xl pt-md border-t border-outline-variant">
+            <button className="w-full flex items-center justify-center gap-sm py-2 border border-outline-variant rounded-lg text-body-md font-bold hover:bg-surface-container-high transition-colors">
+              <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+              View in CRM
+            </button>
           </div>
         </div>
-      ) : (
-        <div className="flex-1 flex items-center justify-center bg-gray-50">
-          <div className="text-center text-gray-500">
-            <div className="text-6xl mb-4">💬</div>
-            <p className="text-lg">Select a conversation to start</p>
-          </div>
-        </div>
-      )}
-      </div>
-    </>
+      </section>
+    </div>
   )
 }
 

@@ -1,6 +1,6 @@
 import React from 'react'
 
-type PageType = 'dashboard' | 'pipeline' | 'ai-studio' | 'estimator' | 'settings' | 'chat-monitoring'
+type PageType = 'dashboard' | 'chat-monitoring' | 'pipeline' | 'estimator' | 'ai-studio' | 'settings'
 
 interface SidebarProps {
   currentPage: PageType
@@ -8,60 +8,55 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
-  const menuItems = [
-    { id: 'dashboard' as PageType, icon: '📊', label: 'Dashboard' },
-    { id: 'chat-monitoring' as PageType, icon: '💬', label: 'Chat Monitor', badge: 3 },
-    { id: 'pipeline' as PageType, icon: '📋', label: 'Pipeline' },
-    { id: 'ai-studio' as PageType, icon: '✨', label: 'AI Studio' },
-    { id: 'estimator' as PageType, icon: '🧮', label: 'Estimator' },
-    { id: 'settings' as PageType, icon: '⚙️', label: 'Settings' },
+  const menuItems: Array<{ id: PageType; icon: string; label: string }> = [
+    { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
+    { id: 'chat-monitoring', icon: 'chat', label: 'Active Chats' },
+    { id: 'pipeline', icon: 'groups', label: 'Client Database' },
+    { id: 'estimator', icon: 'calculate', label: 'AI Estimator' },
+    { id: 'ai-studio', icon: 'auto_awesome', label: 'AI Studio' },
+    { id: 'settings', icon: 'settings', label: 'Settings' },
   ]
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
+    <aside className="fixed left-0 top-0 h-full w-[280px] bg-surface border-r border-outline-variant flex flex-col p-md z-50">
       {/* Header */}
-      <div className="p-6 border-b border-gray-200">
-        <h1 className="text-xl font-bold text-gray-900">Sudut Ruang</h1>
-        <p className="text-sm text-gray-500">Interior Design CRM</p>
+      <div className="mb-xl">
+        <h1 className="font-headline-md text-headline-md font-bold text-primary">Sudut Ruang</h1>
+        <p className="font-body-md text-body-md text-on-surface-variant">AI Operator</p>
       </div>
 
-      {/* New Project Button */}
-      <div className="p-4">
-        <button className="w-full bg-primary text-white font-semibold py-3 px-4 rounded-lg hover:bg-primary-dark transition-colors flex items-center justify-center gap-2">
-          <span className="text-xl">+</span>
-          <span>Proyek Baru</span>
-        </button>
-      </div>
-
-      {/* Menu Items */}
-      <nav className="flex-1 px-3 py-4">
-        {menuItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => onPageChange(item.id)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors relative ${
-              currentPage === item.id
-                ? 'bg-indigo-50 text-primary font-semibold'
-                : 'text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            <span className="text-xl">{item.icon}</span>
-            <span className="flex-1 text-left">{item.label}</span>
-            {'badge' in item && item.badge && item.badge > 0 && (
-              <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
-                {item.badge}
+      {/* Nav */}
+      <nav className="flex-1 space-y-base">
+        {menuItems.map((item) => {
+          const isActive = currentPage === item.id
+          return (
+            <button
+              key={item.id}
+              onClick={() => onPageChange(item.id)}
+              className={`w-full flex items-center gap-sm px-sm py-md rounded-lg transition-all duration-200 active:scale-[0.98] ${
+                isActive
+                  ? 'text-primary font-bold border-r-2 border-primary bg-surface-container'
+                  : 'text-on-surface-variant hover:bg-surface-container'
+              }`}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={isActive ? { fontVariationSettings: "'FILL' 1" } : {}}
+              >
+                {item.icon}
               </span>
-            )}
-          </button>
-        ))}
+              <span className="font-body-md">{item.label}</span>
+            </button>
+          )
+        })}
       </nav>
 
-      {/* Help Button */}
-      <div className="p-4 border-t border-gray-200">
-        <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
-          <span className="text-xl">❓</span>
-          <span>Bantuan</span>
-        </button>
+      {/* Status */}
+      <div className="mt-auto p-sm bg-surface-container rounded-lg border border-outline-variant flex items-center gap-sm">
+        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+        <span className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">
+          System Status: Active
+        </span>
       </div>
     </aside>
   )

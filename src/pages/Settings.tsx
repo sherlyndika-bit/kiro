@@ -1,146 +1,144 @@
 import React from 'react'
 
 const Settings: React.FC = () => {
+  const integrations = [
+    { icon: 'chat', name: 'WhatsApp Business', status: 'Connected', active: true },
+    { icon: 'photo_camera', name: 'Instagram', status: 'Connected', active: true },
+    { icon: 'mail', name: 'Email (Gmail)', status: 'Not Connected', active: false },
+    { icon: 'account_tree', name: 'n8n Workflow', status: 'Active', active: true },
+  ]
+
+  const aiToggles = [
+    { name: 'Auto Follow-Up', desc: 'Kirim pesan otomatis ke lead baru', enabled: true },
+    { name: 'Smart Estimator', desc: 'Kalkulasi biaya dengan AI', enabled: true },
+    { name: 'Content Generator', desc: 'Generate konten marketing otomatis', enabled: true },
+    { name: 'Confidence Alerts', desc: 'Alert ketika AI butuh bantuan human', enabled: true },
+  ]
+
   return (
-    <div className="p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Settings</h1>
-        <p className="text-gray-600">Kelola preferensi dan integrasi sistem Anda.</p>
+    <div className="p-gutter max-w-container-max space-y-md">
+      <div>
+        <h1 className="font-display-lg text-display-lg font-bold text-on-background">Settings</h1>
+        <p className="text-body-md text-on-surface-variant">
+          Kelola preferensi dan integrasi sistem
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-md">
         {/* Company Profile */}
-        <div className="card">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Profil Perusahaan</h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Nama Perusahaan</label>
-              <input type="text" value="Sudut Ruang" className="input-field" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-              <input type="email" value="hello@sudutruang.id" className="input-field" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Telepon</label>
-              <input type="tel" value="+62 812-3456-7890" className="input-field" />
-            </div>
-            <button className="btn-primary">Simpan Perubahan</button>
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+          <h3 className="font-headline-sm text-headline-sm font-bold mb-md">Profil Perusahaan</h3>
+          <div className="space-y-md">
+            {[
+              { label: 'Nama Perusahaan', value: 'Sudut Ruang' },
+              { label: 'Email', value: 'hello@sudutruang.id' },
+              { label: 'Telepon', value: '+62 812-3456-7890' },
+            ].map((f) => (
+              <div key={f.label}>
+                <label className="text-label-caps text-outline uppercase block mb-2">
+                  {f.label}
+                </label>
+                <input
+                  type="text"
+                  defaultValue={f.value}
+                  className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md focus:ring-2 focus:ring-secondary outline-none"
+                />
+              </div>
+            ))}
+            <button className="w-full py-3 bg-primary text-on-primary rounded-lg font-headline-sm text-[14px] font-bold uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all">
+              Simpan Perubahan
+            </button>
           </div>
         </div>
 
         {/* AI Configuration */}
-        <div className="card">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Konfigurasi AI</h2>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-900">Auto Follow-Up</p>
-                <p className="text-sm text-gray-600">Kirim pesan otomatis ke lead baru</p>
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+          <h3 className="font-headline-sm text-headline-sm font-bold mb-md">Konfigurasi AI</h3>
+          <div className="space-y-sm">
+            {aiToggles.map((t, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between p-sm bg-surface rounded-lg border border-outline-variant"
+              >
+                <div className="flex-1">
+                  <p className="text-body-md font-bold">{t.name}</p>
+                  <p className="text-label-caps text-outline">{t.desc}</p>
+                </div>
+                <div
+                  className={`w-12 h-6 rounded-full relative cursor-pointer shadow-inner ${
+                    t.enabled ? 'bg-emerald-500' : 'bg-outline'
+                  }`}
+                >
+                  <div
+                    className={`absolute top-1 bg-white w-4 h-4 rounded-full ${
+                      t.enabled ? 'right-1' : 'left-1'
+                    }`}
+                  ></div>
+                </div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" defaultChecked />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-900">Smart Estimator</p>
-                <p className="text-sm text-gray-600">Kalkulasi biaya dengan AI</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" defaultChecked />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-900">Content Generator</p>
-                <p className="text-sm text-gray-600">Generate konten marketing otomatis</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" defaultChecked />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
-            </div>
+            ))}
           </div>
         </div>
 
         {/* Integrations */}
-        <div className="card">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Integrasi</h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">💬</span>
-                <div>
-                  <p className="font-medium text-gray-900">WhatsApp Business</p>
-                  <p className="text-sm text-gray-600">Connected</p>
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+          <h3 className="font-headline-sm text-headline-sm font-bold mb-md">Integrasi</h3>
+          <div className="space-y-sm">
+            {integrations.map((int) => (
+              <div
+                key={int.name}
+                className="flex items-center justify-between p-sm border border-outline-variant rounded-lg"
+              >
+                <div className="flex items-center gap-sm">
+                  <div className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center">
+                    <span className="material-symbols-outlined text-primary text-[18px]">
+                      {int.icon}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-body-md font-bold">{int.name}</p>
+                    <p
+                      className={`text-label-caps ${
+                        int.active ? 'text-emerald-600' : 'text-outline'
+                      }`}
+                    >
+                      {int.status}
+                    </p>
+                  </div>
                 </div>
+                <button className="text-label-caps font-bold text-secondary uppercase">
+                  {int.active ? 'Configure' : 'Connect'}
+                </button>
               </div>
-              <button className="text-sm text-primary font-semibold">Configure</button>
-            </div>
-
-            <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">📧</span>
-                <div>
-                  <p className="font-medium text-gray-900">Email (Gmail)</p>
-                  <p className="text-sm text-gray-600">Not connected</p>
-                </div>
-              </div>
-              <button className="text-sm text-primary font-semibold">Connect</button>
-            </div>
-
-            <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">📸</span>
-                <div>
-                  <p className="font-medium text-gray-900">Instagram</p>
-                  <p className="text-sm text-gray-600">Connected</p>
-                </div>
-              </div>
-              <button className="text-sm text-primary font-semibold">Configure</button>
-            </div>
+            ))}
           </div>
         </div>
 
-        {/* Pricing Plans */}
-        <div className="card">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Paket Berlangganan</h2>
-          <div className="space-y-4">
-            <div className="p-4 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg text-white">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold">Current Plan</span>
-                <span className="px-2 py-1 bg-white/20 rounded text-xs">PRO</span>
-              </div>
-              <div className="text-3xl font-bold mb-1">Rp 500K</div>
-              <div className="text-sm opacity-90">per bulan</div>
+        {/* n8n Webhook */}
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+          <h3 className="font-headline-sm text-headline-sm font-bold mb-md">n8n Webhook URL</h3>
+          <div className="space-y-md">
+            <div>
+              <label className="text-label-caps text-outline uppercase block mb-2">
+                Webhook Base URL
+              </label>
+              <input
+                type="text"
+                defaultValue="https://n8n.workflow.ai/v1/hooks/sudutruang"
+                className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg font-mono-label text-mono-label focus:ring-2 focus:ring-secondary outline-none"
+              />
             </div>
-
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
-                <span>Unlimited Projects</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
-                <span>AI Estimator & Proposal Generator</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
-                <span>WhatsApp Integration</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
-                <span>Advanced Analytics</span>
-              </div>
+            <div className="p-sm bg-surface-container rounded-lg flex items-start gap-sm">
+              <span className="material-symbols-outlined text-secondary text-[18px]">info</span>
+              <p className="text-body-md text-on-surface-variant">
+                URL ini digunakan untuk komunikasi 2 arah antara dashboard dan workflow n8n Anda.
+                Pastikan endpoint dapat diakses dari internet.
+              </p>
             </div>
-
-            <button className="btn-secondary w-full">Upgrade Plan</button>
+            <button className="w-full py-3 border border-outline-variant rounded-lg text-body-md font-bold hover:bg-surface-container transition-colors flex items-center justify-center gap-sm">
+              <span className="material-symbols-outlined text-[18px]">sync</span>
+              Test Connection
+            </button>
           </div>
         </div>
       </div>

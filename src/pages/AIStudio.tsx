@@ -1,165 +1,123 @@
 import React, { useState } from 'react'
 
 const AIStudio: React.FC = () => {
-  const [selectedTool, setSelectedTool] = useState<string>('content-engine')
+  const [selectedTool, setSelectedTool] = useState('content-engine')
 
-  const aiTools = [
+  const tools = [
     {
       id: 'content-engine',
+      icon: 'edit_note',
       name: 'AI Content Engine',
-      icon: '✍️',
-      description: 'Generate konten marketing, caption sosial media, dan artikel blog',
-      features: ['Instagram Caption', 'Blog Post', 'Email Marketing', 'Portfolio Description'],
+      desc: 'Generate konten marketing, caption, dan artikel blog',
+      tags: ['Instagram Caption', 'Blog Post', 'Email Marketing'],
     },
     {
-      id: 'proposal-generator',
+      id: 'proposal',
+      icon: 'description',
       name: 'AI Proposal Generator',
-      icon: '📄',
-      description: 'Buat proposal profesional secara otomatis dengan AI',
-      features: ['Proposal Desain', 'RAB Detail', 'Timeline Proyek', 'Terms & Conditions'],
+      desc: 'Buat proposal profesional secara otomatis',
+      tags: ['Proposal Desain', 'RAB Detail', 'Timeline'],
     },
     {
-      id: 'follow-up',
+      id: 'followup',
+      icon: 'campaign',
       name: 'AI Follow-Up Automation',
-      icon: '🔔',
-      description: 'Otomatis follow-up lead dan klien dengan pesan personal',
-      features: ['WhatsApp Auto-Reply', 'Email Sequences', 'Reminder System', 'Smart Scheduling'],
+      desc: 'Otomatis follow-up lead dan klien',
+      tags: ['WA Auto-Reply', 'Email Sequences', 'Reminder'],
     },
     {
-      id: 'image-generator',
+      id: 'image',
+      icon: 'palette',
       name: 'AI Image Generator',
-      icon: '🎨',
-      description: 'Generate visualisasi desain dan mood board dengan AI',
-      features: ['Mood Board', 'Concept Visualization', 'Material Suggestions', 'Color Palettes'],
+      desc: 'Generate visualisasi desain dengan AI',
+      tags: ['Mood Board', 'Concept Visual', 'Color Palette'],
     },
   ]
 
   return (
-    <div className="p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">AI Studio</h1>
-        <p className="text-gray-600">Suite lengkap AI tools untuk produktivitas maksimal.</p>
+    <div className="p-gutter max-w-container-max space-y-md">
+      <div>
+        <h1 className="font-display-lg text-display-lg font-bold text-on-background">AI Studio</h1>
+        <p className="text-body-md text-on-surface-variant">
+          Suite lengkap AI tools untuk produktivitas maksimal
+        </p>
       </div>
 
-      {/* AI Tools Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        {aiTools.map((tool) => (
-          <div
-            key={tool.id}
-            onClick={() => setSelectedTool(tool.id)}
-            className={`card cursor-pointer transition-all hover:shadow-lg ${
-              selectedTool === tool.id ? 'ring-2 ring-primary' : ''
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+        {tools.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setSelectedTool(t.id)}
+            className={`text-left bg-surface-container-lowest border rounded-xl p-md transition-all hover:shadow-md ${
+              selectedTool === t.id
+                ? 'border-primary border-2'
+                : 'border-outline-variant'
             }`}
           >
-            <div className="flex items-start gap-4 mb-4">
-              <span className="text-4xl">{tool.icon}</span>
+            <div className="flex items-start gap-sm mb-md">
+              <div className="w-12 h-12 rounded-lg bg-primary-container text-white flex items-center justify-center flex-shrink-0">
+                <span className="material-symbols-outlined">{t.icon}</span>
+              </div>
               <div className="flex-1">
-                <h3 className="text-lg font-bold text-gray-900 mb-1">{tool.name}</h3>
-                <p className="text-sm text-gray-600">{tool.description}</p>
+                <h3 className="font-headline-sm text-headline-sm font-bold mb-1">{t.name}</h3>
+                <p className="text-body-md text-on-surface-variant">{t.desc}</p>
               </div>
             </div>
-
-            <div className="flex flex-wrap gap-2">
-              {tool.features.map((feature, index) => (
+            <div className="flex flex-wrap gap-1">
+              {t.tags.map((tag, i) => (
                 <span
-                  key={index}
-                  className="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"
+                  key={i}
+                  className="px-2 py-0.5 bg-surface-container rounded-full text-label-caps text-on-surface-variant"
                 >
-                  {feature}
+                  {tag}
                 </span>
               ))}
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
-      {/* Selected Tool Workspace */}
-      <div className="card">
-        <h2 className="text-xl font-bold text-gray-900 mb-6">
-          {aiTools.find((t) => t.id === selectedTool)?.name} Workspace
-        </h2>
+      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+        <h3 className="font-headline-sm text-headline-sm font-bold mb-md">
+          {tools.find((t) => t.id === selectedTool)?.name} Workspace
+        </h3>
 
-        {selectedTool === 'content-engine' && (
-          <div className="space-y-4">
+        <div className="space-y-md">
+          <div>
+            <label className="text-label-caps text-outline uppercase block mb-2">
+              Deskripsi Project
+            </label>
+            <textarea
+              rows={4}
+              placeholder="Contoh: Renovasi apartemen studio 45m² dengan konsep minimalis modern..."
+              className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md focus:ring-2 focus:ring-secondary outline-none resize-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-sm">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Tipe Konten</label>
-              <select className="input-field">
-                <option>Instagram Caption</option>
-                <option>Blog Post</option>
-                <option>Email Marketing</option>
-                <option>Portfolio Description</option>
+              <label className="text-label-caps text-outline uppercase block mb-2">Tone</label>
+              <select className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md focus:ring-2 focus:ring-secondary outline-none">
+                <option>Professional</option>
+                <option>Casual</option>
+                <option>Inspirational</option>
               </select>
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Deskripsi Proyek
-              </label>
-              <textarea
-                className="input-field min-h-[120px]"
-                placeholder="Contoh: Renovasi apartemen studio 45m2 dengan konsep minimalis modern..."
-              ></textarea>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tone</label>
-                <select className="input-field">
-                  <option>Professional</option>
-                  <option>Casual</option>
-                  <option>Inspirational</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Panjang</label>
-                <select className="input-field">
-                  <option>Short (50-100 kata)</option>
-                  <option>Medium (100-200 kata)</option>
-                  <option>Long (200+ kata)</option>
-                </select>
-              </div>
-            </div>
-
-            <button className="btn-primary w-full">✨ Generate Konten</button>
-
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="text-sm text-gray-600 mb-2">Generated Content:</div>
-              <p className="text-gray-800 italic">
-                Hasil konten AI akan muncul di sini...
-              </p>
+              <label className="text-label-caps text-outline uppercase block mb-2">Length</label>
+              <select className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md focus:ring-2 focus:ring-secondary outline-none">
+                <option>Short</option>
+                <option>Medium</option>
+                <option>Long</option>
+              </select>
             </div>
           </div>
-        )}
 
-        {selectedTool === 'proposal-generator' && (
-          <div className="space-y-4">
-            <p className="text-gray-600">
-              Upload data proyek dan AI akan generate proposal lengkap dengan RAB, timeline, dan
-              terms & conditions.
-            </p>
-            <button className="btn-primary">📄 Generate Proposal</button>
-          </div>
-        )}
-
-        {selectedTool === 'follow-up' && (
-          <div className="space-y-4">
-            <p className="text-gray-600">
-              Set up automated follow-up sequences untuk lead dan klien Anda.
-            </p>
-            <button className="btn-primary">🔔 Setup Automation</button>
-          </div>
-        )}
-
-        {selectedTool === 'image-generator' && (
-          <div className="space-y-4">
-            <p className="text-gray-600">
-              Generate visualisasi desain dan mood board dengan teknologi AI image generation.
-            </p>
-            <button className="btn-primary">🎨 Generate Image</button>
-          </div>
-        )}
+          <button className="w-full py-3 bg-primary text-on-primary rounded-lg font-headline-sm text-[14px] font-bold uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-sm">
+            <span className="material-symbols-outlined">auto_awesome</span>
+            Generate dengan AI
+          </button>
+        </div>
       </div>
     </div>
   )
