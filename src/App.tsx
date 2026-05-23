@@ -5,8 +5,9 @@ import Estimator from './pages/Estimator'
 import Pipeline from './pages/Pipeline'
 import AIStudio from './pages/AIStudio'
 import Settings from './pages/Settings'
+import ChatMonitoring from './pages/ChatMonitoring'
 
-type PageType = 'dashboard' | 'pipeline' | 'ai-studio' | 'estimator' | 'settings'
+type PageType = 'dashboard' | 'pipeline' | 'ai-studio' | 'estimator' | 'settings' | 'chat-monitoring'
 
 function App() {
   const [currentPage, setCurrentPage] = useState<PageType>('estimator')
@@ -21,10 +22,12 @@ function App() {
         return <AIStudio />
       case 'estimator':
         return <Estimator />
+      case 'chat-monitoring':
+        return <ChatMonitoring />
       case 'settings':
         return <Settings />
       default:
-        return <Estimator />
+        return <ChatMonitoring />
     }
   }
 

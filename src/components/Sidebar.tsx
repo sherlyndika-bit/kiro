@@ -1,6 +1,6 @@
 import React from 'react'
 
-type PageType = 'dashboard' | 'pipeline' | 'ai-studio' | 'estimator' | 'settings'
+type PageType = 'dashboard' | 'pipeline' | 'ai-studio' | 'estimator' | 'settings' | 'chat-monitoring'
 
 interface SidebarProps {
   currentPage: PageType
@@ -10,6 +10,7 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
   const menuItems = [
     { id: 'dashboard' as PageType, icon: '📊', label: 'Dashboard' },
+    { id: 'chat-monitoring' as PageType, icon: '💬', label: 'Chat Monitor', badge: 3 },
     { id: 'pipeline' as PageType, icon: '📋', label: 'Pipeline' },
     { id: 'ai-studio' as PageType, icon: '✨', label: 'AI Studio' },
     { id: 'estimator' as PageType, icon: '🧮', label: 'Estimator' },
@@ -38,14 +39,19 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
           <button
             key={item.id}
             onClick={() => onPageChange(item.id)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors relative ${
               currentPage === item.id
                 ? 'bg-indigo-50 text-primary font-semibold'
                 : 'text-gray-700 hover:bg-gray-50'
             }`}
           >
             <span className="text-xl">{item.icon}</span>
-            <span>{item.label}</span>
+            <span className="flex-1 text-left">{item.label}</span>
+            {'badge' in item && item.badge && item.badge > 0 && (
+              <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                {item.badge}
+              </span>
+            )}
           </button>
         ))}
       </nav>
