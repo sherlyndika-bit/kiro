@@ -1,183 +1,236 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Conversation, Message, ConversationMode } from '../types/chat'
-import { ChatService, mockConversations, quickReplies } from '../services/chatService'
+import {
+  supabase,
+  DBConversation,
+  DBMessage,
+  ConversationService,
+  QuickReplyService,
+  DBQuickReply,
+} from '../services/supabaseClient'
+import { n8nService } from '../services/n8nWebhookService'
 
 const ChatMonitoring: React.FC = () => {
-  const [conversations, setConversations] = useState<Conversation[]>(mockConversations)
-  const [selectedConv, setSelectedConv] = useState<Conversation | null>(mockConversations[0])
+  const [conversations, setConversations] = useState<DBConversation[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<DBMessage[]>([])
   const [messageInput, setMessageInput] = useState('')
-  const [autoMode, setAutoMode] = useState(true)
+  const [filterSource, setFilterSource] = useState<'all' | 'whatsapp' | 'instagram'>('all')
+  const [quickReplies, setQuickReplies] = useState<DBQuickReply[]>([])
+  const [showQuickReplies, setShowQuickReplies] = useState(false)
+  const [loading, setLoading] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const selectedConv = conversations.find((c) => c.id === selectedId) || null
+
+  useEffect(() => {
+    loadConversations()
+    loadQuickReplies()
+    setupRealtimeConversations()
+  }, [])
+
+  useEffect(() => {
+    if (selectedId) {
+      loadMessages(selectedId)
+      setupRealtimeMessages(selectedId)
+      ConversationService.markRead(selectedId)
+    }
+  }, [selectedId])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [selectedConv?.messages])
+  }, [messages])
 
-  useEffect(() => {
-    if (selectedConv) setAutoMode(selectedConv.mode === 'ai')
-  }, [selectedConv?.id])
+  const loadConversations = async () => {
+    const data = await ConversationService.getAll()
+    setConversations(data)
+    if (data.length > 0 && !selectedId) setSelectedId(data[0].id)
+    setLoading(false)
+  }
 
-  const onlineCount = conversations.filter((c) => c.status === 'active').length
+  const loadMessages = async (convId: string) => {
+    const data = await ConversationService.getMessages(convId)
+    setMessages(data)
+  }
+
+  const loadQuickReplies = async () => {
+    const data = await QuickReplyService.getAll()
+    setQuickReplies(data)
+  }
+
+  const setupRealtimeConversations = () => {
+    const channel = supabase
+      .channel('conv-monitor')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setConversations((prev) => [payload.new as DBConversation, ...prev])
+        } else if (payload.eventType === 'UPDATE') {
+          setConversations((prev) =>
+            prev.map((c) => (c.id === payload.new.id ? (payload.new as DBConversation) : c))
+          )
+        }
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }
+
+  const setupRealtimeMessages = (convId: string) => {
+    const channel = supabase
+      .channel(`msg-${convId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${convId}` },
+        (payload) => {
+          setMessages((prev) => [...prev, payload.new as DBMessage])
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !selectedConv) return
 
-    const newMessage: Message = {
-      id: `msg-${Date.now()}`,
-      conversationId: selectedConv.id,
+    const msg: Omit<DBMessage, 'id' | 'created_at'> = {
+      conversation_id: selectedConv.id,
       content: messageInput,
-      role: autoMode ? 'ai' : 'human',
-      timestamp: new Date(),
+      role: 'human',
       source: selectedConv.source,
-      aiConfidence: autoMode ? 0.95 : undefined,
+      ai_confidence: null,
+      needs_human_review: false,
+      metadata: {},
     }
 
-    const updatedConv = {
-      ...selectedConv,
-      messages: [...selectedConv.messages, newMessage],
-      lastMessage: messageInput,
-      lastMessageTime: new Date(),
-    }
+    await ConversationService.insertMessage(msg)
+    await ConversationService.upsertConversation({
+      id: selectedConv.id,
+      last_message: messageInput,
+      last_message_at: new Date().toISOString(),
+    })
 
-    setSelectedConv(updatedConv)
-    setConversations(conversations.map((c) => (c.id === selectedConv.id ? updatedConv : c)))
-    await ChatService.sendMessage(selectedConv.id, messageInput, autoMode, selectedConv)
+    // Kirim via n8n ke WA
+    await n8nService.sendMessageToClient({
+      conversationId: selectedConv.id,
+      clientPhoneOrUsername: selectedConv.id,
+      message: messageInput,
+      source: selectedConv.source as 'whatsapp' | 'instagram',
+      senderRole: 'human',
+      humanOperator: 'Dashboard Operator',
+    })
+
     setMessageInput('')
   }
 
-  const handleTakeOver = async () => {
+  const handleToggleMode = async () => {
     if (!selectedConv) return
-    const newMode: ConversationMode = autoMode ? 'manual' : 'ai'
-    setAutoMode(!autoMode)
-
-    const updated = { ...selectedConv, mode: newMode }
-    setSelectedConv(updated)
-    setConversations(conversations.map((c) => (c.id === selectedConv.id ? updated : c)))
-    await ChatService.toggleMode(selectedConv.id, newMode)
+    const newMode = selectedConv.mode === 'ai' ? 'manual' : 'ai'
+    await ConversationService.toggleMode(selectedConv.id, newMode)
+    await n8nService.toggleConversationMode({ conversationId: selectedConv.id, newMode })
   }
 
-  const insertQuickReply = (content: string) => setMessageInput(content)
+  const filtered = conversations.filter((c) =>
+    filterSource === 'all' ? true : c.source === filterSource
+  )
 
-  const getSourceBadge = (source: string) => {
-    switch (source) {
-      case 'whatsapp':
-        return { letter: 'W', color: 'bg-green-500' }
-      case 'instagram':
-        return { letter: 'I', color: 'bg-pink-500' }
-      default:
-        return { letter: '?', color: 'bg-gray-500' }
-    }
+  const formatTime = (dateStr: string) => {
+    const d = new Date(dateStr)
+    return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
   }
 
-  const getStatusLabel = (conv: Conversation) => {
-    if (conv.mode === 'manual')
-      return {
-        label: 'Human Active',
-        className: 'bg-error-container text-on-error-container',
-      }
-    const needsHuman = conv.messages.some((m) => m.metadata?.needsHumanReview)
-    if (needsHuman)
-      return {
-        label: 'Human Needed',
-        className: 'bg-error-container text-on-error-container',
-      }
-    if (conv.status === 'idle')
-      return {
-        label: 'Resolved',
-        className: 'border border-outline text-outline',
-      }
-    return {
-      label: 'AI Handled',
-      className: 'bg-secondary-container text-on-secondary-container',
-    }
-  }
-
-  const formatTimeAgo = (date: Date) => {
-    const mins = Math.floor((Date.now() - date.getTime()) / 60000)
-    if (mins < 1) return 'now'
-    if (mins < 60) return `${mins}m ago`
-    const hours = Math.floor(mins / 60)
-    if (hours < 24) return `${hours}h ago`
-    return `${Math.floor(hours / 24)}d ago`
+  const formatTimeAgo = (dateStr: string) => {
+    const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000)
+    if (mins < 1) return 'baru'
+    if (mins < 60) return `${mins}m`
+    return `${Math.floor(mins / 60)}j`
   }
 
   return (
-    <div className="flex-1 flex overflow-hidden">
-      {/* Column 1: Chat List */}
-      <section className="w-80 border-r border-outline-variant bg-surface-container-lowest flex flex-col">
+    <div className="flex-1 flex overflow-hidden" style={{ height: 'calc(100vh - 64px)' }}>
+      {/* Column 1: Conversation List */}
+      <section className="w-80 border-r border-outline-variant bg-surface-container-lowest flex flex-col flex-shrink-0">
         <div className="p-md border-b border-outline-variant">
           <div className="flex items-center justify-between mb-sm">
             <span className="font-label-caps text-label-caps text-outline uppercase">
               Active Streams
             </span>
             <span className="font-mono-label text-mono-label bg-primary-container text-on-primary-container px-2 py-1 rounded">
-              {onlineCount} Online
+              {filtered.filter((c) => c.status === 'active').length} Online
             </span>
+          </div>
+          <div className="flex gap-1">
+            {(['all', 'whatsapp', 'instagram'] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setFilterSource(s)}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-label-caps font-bold uppercase transition-colors ${
+                  filterSource === s
+                    ? 'bg-primary text-on-primary'
+                    : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
+                }`}
+              >
+                {s === 'all' ? `All (${conversations.length})` : s === 'whatsapp' ? 'WA' : 'IG'}
+              </button>
+            ))}
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {conversations.map((conv) => {
-            const badge = getSourceBadge(conv.source)
-            const status = getStatusLabel(conv)
-            const isActive = selectedConv?.id === conv.id
-            const needsHuman = conv.messages.some((m) => m.metadata?.needsHumanReview)
-            const isResolved = conv.status === 'idle' && conv.mode === 'ai'
-
-            return (
+          {loading ? (
+            <div className="p-md space-y-sm">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-16 bg-surface-container rounded-lg animate-pulse" />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="p-md text-center text-outline">
+              <span className="material-symbols-outlined text-4xl">chat</span>
+              <p className="text-body-md mt-2">Belum ada percakapan</p>
+            </div>
+          ) : (
+            filtered.map((conv) => (
               <div
                 key={conv.id}
-                onClick={() => setSelectedConv(conv)}
-                className={`p-md border-b border-outline-variant transition-colors cursor-pointer group ${
-                  isActive
-                    ? 'bg-surface-container'
-                    : 'hover:bg-surface-container-low'
-                } ${needsHuman ? 'border-l-4 border-l-error' : ''}`}
+                onClick={() => setSelectedId(conv.id)}
+                className={`p-md border-b border-outline-variant cursor-pointer hover:bg-surface-container-low transition-colors ${
+                  selectedId === conv.id ? 'bg-surface-container border-l-4 border-l-primary' : ''
+                } ${conv.unread_count > 0 ? 'border-l-4 border-l-error' : ''}`}
               >
-                <div className={`flex items-start gap-sm ${isResolved ? 'opacity-60' : ''}`}>
+                <div className="flex items-start gap-sm">
                   <div className="relative">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-fixed to-secondary-fixed flex items-center justify-center text-primary font-bold">
-                      {conv.clientName.charAt(0).toUpperCase()}
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-fixed to-secondary-fixed flex items-center justify-center text-primary font-bold">
+                      {conv.client_name.charAt(0).toUpperCase()}
                     </div>
-                    <div
-                      className={`absolute -bottom-1 -right-1 ${badge.color} w-4 h-4 rounded-full border-2 border-white flex items-center justify-center`}
-                    >
-                      <span className="text-[10px] text-white font-bold">{badge.letter}</span>
+                    <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-bold text-white ${
+                      conv.source === 'whatsapp' ? 'bg-green-500' : 'bg-pink-500'
+                    }`}>
+                      {conv.source === 'whatsapp' ? 'W' : 'I'}
                     </div>
                   </div>
-
                   <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="font-headline-sm text-[14px] font-bold text-on-background truncate">
-                        {conv.clientName}
+                    <div className="flex justify-between items-start">
+                      <span className="font-bold text-on-background text-[13px] truncate">
+                        {conv.client_name}
                       </span>
-                      <span
-                        className={`font-label-caps text-[10px] ${
-                          needsHuman ? 'text-error font-bold' : 'text-outline'
-                        }`}
-                      >
-                        {needsHuman ? 'Priority' : formatTimeAgo(conv.lastMessageTime)}
+                      <span className={`text-label-caps text-[10px] ml-1 flex-shrink-0 ${
+                        conv.unread_count > 0 ? 'text-error font-bold' : 'text-outline'
+                      }`}>
+                        {conv.unread_count > 0 ? 'Baru' : formatTimeAgo(conv.last_message_at)}
                       </span>
                     </div>
-                    <p
-                      className={`text-body-md text-on-surface-variant line-clamp-1 ${
-                        needsHuman ? 'font-bold' : ''
-                      }`}
-                    >
-                      {conv.lastMessage}
+                    <p className="text-body-md text-on-surface-variant truncate text-[12px]">
+                      {conv.last_message || '—'}
                     </p>
-                    <div className="mt-2 flex items-center gap-xs">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter ${status.className}`}
-                      >
-                        {status.label}
-                      </span>
-                    </div>
+                    <span className={`mt-1 inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                      conv.mode === 'ai'
+                        ? 'bg-secondary-container text-on-secondary-container'
+                        : 'bg-error-container text-on-error-container'
+                    }`}>
+                      {conv.mode === 'ai' ? 'AI Handled' : 'Human Active'}
+                    </span>
                   </div>
                 </div>
               </div>
-            )
-          })}
+            ))
+          )}
         </div>
       </section>
 
@@ -185,142 +238,109 @@ const ChatMonitoring: React.FC = () => {
       <section className="flex-1 flex flex-col bg-white min-w-0">
         {selectedConv ? (
           <>
-            {/* Chat Header */}
+            {/* Header */}
             <div className="px-gutter h-16 border-b border-outline-variant flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-sm">
                 <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">
                   <span className="material-symbols-outlined text-primary">person</span>
                 </div>
                 <div>
-                  <h3 className="font-headline-sm text-[16px] font-bold leading-tight">
-                    {selectedConv.clientName}
+                  <h3 className="font-bold text-on-background text-[16px] leading-tight">
+                    {selectedConv.client_name}
                   </h3>
                   <p className="text-label-caps text-[11px] text-outline">
-                    {selectedConv.source === 'whatsapp' ? 'WhatsApp' : 'Instagram'} • ID:{' '}
-                    {selectedConv.id.toUpperCase()}
+                    {selectedConv.source === 'whatsapp' ? 'WhatsApp' : 'Instagram'} • {selectedConv.id}
                   </p>
                 </div>
               </div>
-
               <div className="flex items-center gap-md">
-                <div
-                  className={`flex items-center gap-xs px-3 py-1.5 rounded-full border ${
-                    autoMode
-                      ? 'bg-emerald-50 border-emerald-100'
-                      : 'bg-orange-50 border-orange-200'
-                  }`}
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      autoMode ? 'bg-emerald-500' : 'bg-orange-500'
-                    }`}
-                  ></span>
-                  <span
-                    className={`text-label-caps uppercase font-bold ${
-                      autoMode ? 'text-emerald-700' : 'text-orange-700'
-                    }`}
-                  >
-                    {autoMode ? 'AI Active' : 'Human Active'}
+                <div className={`flex items-center gap-xs px-3 py-1.5 rounded-full border ${
+                  selectedConv.mode === 'ai'
+                    ? 'bg-emerald-50 border-emerald-100'
+                    : 'bg-orange-50 border-orange-200'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${
+                    selectedConv.mode === 'ai' ? 'bg-emerald-500' : 'bg-orange-500'
+                  }`} />
+                  <span className={`text-label-caps uppercase font-bold ${
+                    selectedConv.mode === 'ai' ? 'text-emerald-700' : 'text-orange-700'
+                  }`}>
+                    {selectedConv.mode === 'ai' ? 'AI Active' : 'Human Active'}
                   </span>
                 </div>
-                <button className="p-2 hover:bg-surface-container rounded-full transition-colors">
-                  <span className="material-symbols-outlined text-outline">more_vert</span>
-                </button>
               </div>
             </div>
 
             {/* Messages */}
             <div className="flex-1 p-gutter overflow-y-auto flex flex-col gap-lg bg-background/30">
-              <div className="flex justify-center">
-                <span className="px-3 py-1 bg-surface-container-low rounded-full text-label-caps text-outline uppercase">
-                  Today, {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-
-              {selectedConv.messages.map((msg) => {
-                if (msg.role === 'client') {
-                  return (
-                    <div key={msg.id} className="flex flex-col items-start max-w-[80%]">
-                      <div className="bg-white border border-outline-variant p-md rounded-xl rounded-tl-none shadow-sm">
-                        <p className="text-body-md text-on-background whitespace-pre-wrap">
-                          {msg.content}
-                        </p>
-                      </div>
-                      <span className="mt-1 text-label-caps text-[10px] text-outline ml-1">
-                        {msg.timestamp.toLocaleTimeString('en-US', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}{' '}
-                        • Delivered
-                      </span>
-                    </div>
-                  )
-                }
-                if (msg.role === 'ai') {
-                  return (
-                    <div key={msg.id} className="flex flex-col items-end max-w-[80%] self-end">
-                      <div className="message-gradient-ai border border-primary/5 p-md rounded-xl rounded-tr-none shadow-sm relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-1 opacity-20">
-                          <span className="material-symbols-outlined text-[14px]">smart_toy</span>
+              {messages.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center text-outline">
+                  <div className="text-center">
+                    <span className="material-symbols-outlined text-5xl">chat_bubble</span>
+                    <p className="text-body-md mt-2">Belum ada pesan</p>
+                  </div>
+                </div>
+              ) : (
+                messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex flex-col max-w-[80%] ${
+                      msg.role === 'client' ? 'items-start' : 'items-end self-end'
+                    }`}
+                  >
+                    <div className={`px-md py-3 rounded-xl shadow-sm relative overflow-hidden ${
+                      msg.role === 'client'
+                        ? 'bg-white border border-outline-variant rounded-tl-none'
+                        : msg.role === 'ai'
+                        ? 'bg-gradient-to-br from-surface-container-low to-surface-container rounded-tr-none border border-primary/5'
+                        : 'bg-primary text-on-primary rounded-tr-none'
+                    }`}>
+                      {msg.role !== 'client' && (
+                        <div className="text-[10px] opacity-60 mb-1 uppercase font-bold">
+                          {msg.role === 'ai' ? '🤖 AI Agent' : '👤 Human'}
+                          {msg.ai_confidence ? ` • ${Math.round(msg.ai_confidence * 100)}%` : ''}
                         </div>
-                        <p className="text-body-md text-on-background whitespace-pre-wrap">
-                          {msg.content}
-                        </p>
-                      </div>
-                      <div className="mt-1 flex items-center gap-xs mr-1">
-                        <span className="material-symbols-outlined text-[14px] text-secondary">
-                          bolt
-                        </span>
-                        <span className="text-label-caps text-[10px] text-secondary font-bold uppercase">
-                          AI Response
-                          {msg.aiConfidence
-                            ? ` • Confidence ${Math.round(msg.aiConfidence * 100)}%`
-                            : ''}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                }
-                // human
-                return (
-                  <div key={msg.id} className="flex flex-col items-end max-w-[80%] self-end">
-                    <div className="bg-primary text-on-primary p-md rounded-xl rounded-tr-none shadow-sm">
+                      )}
                       <p className="text-body-md whitespace-pre-wrap">{msg.content}</p>
                     </div>
-                    <div className="mt-1 flex items-center gap-xs mr-1">
-                      <span className="material-symbols-outlined text-[14px] text-on-surface-variant">
-                        person
-                      </span>
-                      <span className="text-label-caps text-[10px] text-on-surface-variant font-bold uppercase">
-                        Human Operator •{' '}
-                        {msg.timestamp.toLocaleTimeString('en-US', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                    </div>
+                    <span className="text-label-caps text-[10px] text-outline mt-1 mx-1">
+                      {formatTime(msg.created_at)}
+                    </span>
                   </div>
-                )
-              })}
+                ))
+              )}
               <div ref={messagesEndRef} />
             </div>
 
             {/* Input */}
             <div className="p-md border-t border-outline-variant bg-white flex-shrink-0">
-              <div className="flex gap-sm mb-sm overflow-x-auto pb-2 no-scrollbar">
-                {quickReplies.slice(0, 4).map((qr) => (
-                  <button
-                    key={qr.id}
-                    onClick={() => insertQuickReply(qr.content)}
-                    className="whitespace-nowrap px-3 py-1.5 border border-outline-variant rounded-full text-label-caps text-on-surface-variant hover:border-primary transition-colors"
-                  >
-                    {qr.title}
-                  </button>
-                ))}
-              </div>
+              {/* Quick Replies */}
+              {showQuickReplies && quickReplies.length > 0 && (
+                <div className="mb-sm overflow-x-auto no-scrollbar">
+                  <div className="flex gap-2 pb-1">
+                    {quickReplies.map((qr) => (
+                      <button
+                        key={qr.id}
+                        onClick={() => {
+                          setMessageInput(qr.content)
+                          setShowQuickReplies(false)
+                        }}
+                        className="whitespace-nowrap px-3 py-1.5 border border-outline-variant rounded-full text-label-caps text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
+                      >
+                        {qr.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center gap-sm bg-surface-container-low rounded-xl px-md py-sm">
-                <button className="text-outline hover:text-primary">
-                  <span className="material-symbols-outlined">attach_file</span>
+                <button
+                  onClick={() => setShowQuickReplies(!showQuickReplies)}
+                  className="text-outline hover:text-primary transition-colors"
+                  title="Quick Replies"
+                >
+                  <span className="material-symbols-outlined">bolt</span>
                 </button>
                 <textarea
                   rows={1}
@@ -333,15 +353,16 @@ const ChatMonitoring: React.FC = () => {
                     }
                   }}
                   placeholder={
-                    autoMode
-                      ? 'AI is responding... type to override'
-                      : 'Type a message or select a quick reply...'
+                    selectedConv.mode === 'ai'
+                      ? 'AI sedang aktif — switch ke Manual untuk balas manual...'
+                      : 'Ketik pesan...'
                   }
                   className="flex-1 bg-transparent border-none focus:ring-0 outline-none text-body-md resize-none py-1"
+                  disabled={selectedConv.mode === 'ai'}
                 />
                 <button
                   onClick={handleSendMessage}
-                  disabled={!messageInput.trim()}
+                  disabled={!messageInput.trim() || selectedConv.mode === 'ai'}
                   className="bg-primary text-on-primary w-10 h-10 rounded-lg flex items-center justify-center hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-40"
                 >
                   <span className="material-symbols-outlined">send</span>
@@ -353,15 +374,15 @@ const ChatMonitoring: React.FC = () => {
           <div className="flex-1 flex items-center justify-center text-outline">
             <div className="text-center">
               <span className="material-symbols-outlined text-6xl">chat</span>
-              <p className="mt-2 text-body-md">Select a conversation to start</p>
+              <p className="text-body-md mt-2">Pilih percakapan untuk memulai</p>
             </div>
           </div>
         )}
       </section>
 
       {/* Column 3: Control Panel */}
-      <section className="w-[320px] bg-background border-l border-outline-variant p-gutter flex flex-col gap-md overflow-y-auto flex-shrink-0">
-        {/* System Mode */}
+      <section className="w-80 bg-background border-l border-outline-variant p-gutter flex flex-col gap-md overflow-y-auto flex-shrink-0">
+        {/* System Control */}
         <div className="glass-card border border-outline-variant rounded-xl p-md">
           <h4 className="font-label-caps text-label-caps text-outline uppercase mb-md">
             System Control
@@ -369,52 +390,63 @@ const ChatMonitoring: React.FC = () => {
           <div className="flex items-center justify-between p-sm bg-surface rounded-lg mb-sm">
             <span className="text-body-md font-bold">Auto-Mode</span>
             <button
-              onClick={handleTakeOver}
+              onClick={handleToggleMode}
               className={`w-12 h-6 rounded-full relative cursor-pointer shadow-inner transition-colors ${
-                autoMode ? 'bg-emerald-500' : 'bg-outline'
+                selectedConv?.mode === 'ai' ? 'bg-emerald-500' : 'bg-outline'
               }`}
             >
-              <div
-                className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-all ${
-                  autoMode ? 'right-1' : 'left-1'
-                }`}
-              ></div>
+              <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-all ${
+                selectedConv?.mode === 'ai' ? 'right-1' : 'left-1'
+              }`} />
             </button>
           </div>
           <button
-            onClick={handleTakeOver}
-            className="w-full py-3 bg-primary text-on-primary rounded-lg font-headline-sm text-[14px] font-bold uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all"
+            onClick={handleToggleMode}
+            disabled={!selectedConv}
+            className="w-full py-3 bg-primary text-on-primary rounded-lg font-headline-sm text-[14px] font-bold uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all disabled:opacity-40"
           >
-            {autoMode ? 'Take Over Conversation' : 'Return to AI'}
+            {selectedConv?.mode === 'ai' ? 'Take Over Conversation' : 'Return to AI'}
           </button>
           <p className="mt-xs text-[10px] text-outline text-center">
-            AI will pause immediately if Take Over is engaged.
+            AI akan pause saat Take Over aktif.
           </p>
         </div>
 
         {/* AI Confidence */}
         <div className="glass-card border border-outline-variant rounded-xl p-md">
           <div className="flex justify-between items-center mb-md">
-            <h4 className="font-label-caps text-label-caps text-outline uppercase">
-              AI Confidence
-            </h4>
-            <span className="text-emerald-500 font-mono-label font-bold">85.4%</span>
+            <h4 className="font-label-caps text-label-caps text-outline uppercase">AI Confidence</h4>
+            <span className="text-emerald-500 font-mono-label font-bold">
+              {selectedConv && messages.length > 0
+                ? (() => {
+                    const aiMsgs = messages.filter((m) => m.role === 'ai' && m.ai_confidence)
+                    if (aiMsgs.length === 0) return 'N/A'
+                    const avg = aiMsgs.reduce((s, m) => s + (m.ai_confidence || 0), 0) / aiMsgs.length
+                    return `${Math.round(avg * 100)}%`
+                  })()
+                : 'N/A'}
+            </span>
           </div>
-          <div className="relative pt-1">
-            <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-surface-container">
-              <div
-                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-emerald-500"
-                style={{ width: '85%' }}
-              ></div>
-            </div>
+          <div className="overflow-hidden h-2 mb-sm rounded bg-surface-container">
+            <div
+              className="h-full bg-emerald-500 transition-all"
+              style={{
+                width: (() => {
+                  const aiMsgs = messages.filter((m) => m.role === 'ai' && m.ai_confidence)
+                  if (aiMsgs.length === 0) return '0%'
+                  const avg = aiMsgs.reduce((s, m) => s + (m.ai_confidence || 0), 0) / aiMsgs.length
+                  return `${Math.round(avg * 100)}%`
+                })(),
+              }}
+            />
           </div>
           <div className="flex items-center gap-xs">
             <span className="material-symbols-outlined text-[16px] text-emerald-500">verified</span>
-            <span className="text-body-md text-on-surface-variant">High Precision Threshold</span>
+            <span className="text-body-md text-on-surface-variant">Avg dari semua pesan AI</span>
           </div>
         </div>
 
-        {/* Webhook */}
+        {/* n8n Status */}
         <div className="glass-card border border-outline-variant rounded-xl p-md">
           <h4 className="font-label-caps text-label-caps text-outline uppercase mb-md">
             Integrations
@@ -431,8 +463,20 @@ const ChatMonitoring: React.FC = () => {
               <span className="text-[11px] font-bold text-emerald-600">Active</span>
             </div>
           </div>
-          <div className="p-xs bg-surface-container rounded font-mono-label text-[11px] text-outline truncate">
-            https://n8n.workflow.ai/v1/hooks/...
+          <div className="p-xs bg-surface-container rounded font-mono-label text-[10px] text-outline truncate">
+            n8n.srv1696073.hstgr.cloud
+          </div>
+          <div className="flex items-center justify-between mt-sm">
+            <div className="flex items-center gap-xs">
+              <div className="w-8 h-8 rounded bg-emerald-600 text-white flex items-center justify-center font-black text-[10px]">
+                SB
+              </div>
+              <span className="text-body-md font-bold">Supabase</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+              <span className="text-[11px] font-bold text-emerald-600">Realtime</span>
+            </div>
           </div>
         </div>
 
@@ -445,64 +489,60 @@ const ChatMonitoring: React.FC = () => {
             <div className="space-y-md">
               <div>
                 <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
-                  Lead Name
+                  Nama
                 </span>
-                <p className="text-body-md font-bold">{selectedConv.clientName}</p>
+                <p className="font-bold text-on-background">{selectedConv.client_name}</p>
               </div>
               <div>
                 <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
-                  Contact
+                  Phone / ID
                 </span>
-                <p className="text-body-md">
-                  {selectedConv.metadata.phoneNumber || selectedConv.metadata.igUsername || '-'}
-                </p>
+                <p className="text-body-md font-mono-label">{selectedConv.id}</p>
               </div>
               <div>
                 <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
-                  Project
+                  Source
                 </span>
-                <div className="flex items-center gap-xs px-2 py-1 bg-surface-container rounded border border-outline-variant w-fit">
-                  <span className="material-symbols-outlined text-[14px]">account_tree</span>
-                  <span className="text-body-md text-on-surface-variant">
-                    {selectedConv.metadata.projectType || 'No project'}
-                  </span>
-                </div>
+                <p className="text-body-md capitalize">{selectedConv.source}</p>
               </div>
-              {selectedConv.metadata.estimatedValue && (
+              {selectedConv.metadata && Object.keys(selectedConv.metadata).length > 0 && (
                 <div>
                   <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
-                    Estimated Value
+                    Project Info
                   </span>
-                  <p className="text-body-md font-bold text-secondary">
-                    {selectedConv.metadata.estimatedValue}
-                  </p>
+                  {(selectedConv.metadata as Record<string, string>).buildingType && (
+                    <div className="flex items-center gap-xs px-2 py-1 bg-surface-container rounded border border-outline-variant w-fit">
+                      <span className="material-symbols-outlined text-[14px]">home</span>
+                      <span className="text-body-md text-on-surface-variant">
+                        {(selectedConv.metadata as Record<string, string>).buildingType}
+                        {(selectedConv.metadata as Record<string, string>).tier
+                          ? ` — ${(selectedConv.metadata as Record<string, string>).tier}`
+                          : ''}
+                      </span>
+                    </div>
+                  )}
+                  {(selectedConv.metadata as Record<string, string>).estimatedValue && (
+                    <p className="text-body-md font-bold text-secondary mt-sm">
+                      {(selectedConv.metadata as Record<string, string>).estimatedValue}
+                    </p>
+                  )}
                 </div>
               )}
               <div>
                 <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
-                  Last Sync
+                  Last Active
                 </span>
                 <p className="text-body-md">
-                  {selectedConv.lastMessageTime.toLocaleString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
+                  {new Date(selectedConv.last_message_at).toLocaleString('id-ID', {
+                    day: 'numeric', month: 'short', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
                   })}
                 </p>
               </div>
             </div>
           ) : (
-            <p className="text-body-md text-outline">No client selected</p>
+            <p className="text-body-md text-outline">Pilih percakapan</p>
           )}
-
-          <div className="mt-xl pt-md border-t border-outline-variant">
-            <button className="w-full flex items-center justify-center gap-sm py-2 border border-outline-variant rounded-lg text-body-md font-bold hover:bg-surface-container-high transition-colors">
-              <span className="material-symbols-outlined text-[18px]">open_in_new</span>
-              View in CRM
-            </button>
-          </div>
         </div>
       </section>
     </div>
