@@ -26,7 +26,7 @@ class N8NWebhookService {
 
   constructor() {
     this.config = {
-      baseUrl: import.meta.env.VITE_N8N_WEBHOOK_URL || 'http://localhost:5678/webhook',
+      baseUrl: import.meta.env.VITE_N8N_WEBHOOK_URL || 'https://n8n.srv1696073.hstgr.cloud/webhook',
       endpoints: {
         sendMessage: '/dashboard-message',
         incomingMessage: '/incoming-message',
