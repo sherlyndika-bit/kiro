@@ -268,7 +268,7 @@ const ChatMonitoring: React.FC = () => {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 p-gutter overflow-y-auto flex flex-col gap-lg bg-background/30 min-h-0">
+            <div className="chat-messages-scroll flex-1 p-gutter overflow-y-auto flex flex-col gap-lg bg-background/30 min-h-0">
               {messages.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center text-outline">
                   <div className="text-center">
