@@ -128,6 +128,8 @@ const Estimator: React.FC = () => {
 
           <div className="space-y-md flex-1 flex flex-col">
             <div>
+              <label className="text-label-caps text-outline uppercase block mb-2">
+                Tipe & Kelas Bangunan
               </label>
               <select
                 value={constructionId}
