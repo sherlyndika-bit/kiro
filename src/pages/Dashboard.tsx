@@ -22,8 +22,8 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     loadData()
 
-    // Realtime subscription
-    const channel = supabase.channel('dashboard-realtime')
+    // Realtime subscription — unique name untuk hindari duplicate di StrictMode
+    const channel = supabase.channel(`dashboard-${Date.now()}`)
     channel.on('postgres_changes' as any, { event: '*', schema: 'public', table: 'conversations' }, () => {
       loadData()
     })

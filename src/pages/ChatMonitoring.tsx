@@ -58,7 +58,8 @@ const ChatMonitoring: React.FC = () => {
   }
 
   const setupRealtimeConversations = () => {
-    const channel = supabase.channel('conv-monitor')
+    const channelName = `conv-monitor-${Date.now()}`
+    const channel = supabase.channel(channelName)
     channel.on(
       'postgres_changes' as any,
       { event: '*', schema: 'public', table: 'conversations' },
@@ -77,7 +78,8 @@ const ChatMonitoring: React.FC = () => {
   }
 
   const setupRealtimeMessages = (convId: string) => {
-    const channel = supabase.channel(`msg-${convId}`)
+    const channelName = `msg-${convId}-${Date.now()}`
+    const channel = supabase.channel(channelName)
     channel.on(
       'postgres_changes' as any,
       { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${convId}` },
