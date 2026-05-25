@@ -57,44 +57,45 @@
  *  └────────────────────────────┘
  */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;   /* lebar rel vertikal */
-  height: 6px;  /* tinggi rel horizontal */
+  width: 8px;   /* lebar rel vertikal — lebih tebal agar mudah terlihat */
+  height: 8px;  /* tinggi rel horizontal */
 }
 
 /* Track — jalur kosong di belakang thumb */
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: #f1f3f5;          /* warna jalur */
-  border-radius: 10px;          /* sudut membulat */
-  margin: 4px 0;                /* jarak atas-bawah supaya tidak mentok */
+  background: #e8eaed;          /* warna jalur — lebih kontras */
+  border-radius: 10px;
+  margin: 4px 0;
 }
 
 /* Thumb — kotak yang bisa di-drag */
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #c9cdd2;          /* warna thumb normal */
-  border-radius: 10px;          /* sudut membulat */
-  border: 1px solid #f1f3f5;    /* border tipis agar ada "gap" visual ke track */
-  min-height: 32px;             /* panjang minimum thumb agar mudah di-klik */
+  background: #9aa0a6;          /* abu lebih gelap agar kontras */
+  border-radius: 10px;
+  border: 2px solid #e8eaed;    /* gap ke track */
+  min-height: 40px;
 }
 
 /* Thumb saat di-hover */
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #9ea5ad;          /* lebih gelap saat hover */
+  background: #5f6368;
 }
 
 /* Thumb saat aktif / sedang di-drag */
 .custom-scrollbar::-webkit-scrollbar-thumb:active {
-  background: #6c757d;          /* paling gelap saat drag */
+  background: #3c4043;
 }
 
-/* Corner — pojok antara scrollbar vertikal + horizontal */
+/* Corner */
 .custom-scrollbar::-webkit-scrollbar-corner {
-  background: #f1f3f5;          /* samakan dengan track */
+  background: #e8eaed;
 }
 
-/* Firefox fallback (tidak support pseudo-element, pakai property) */
+/* Firefox + paksa selalu tampil */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #c9cdd2 #f1f3f5; /* thumb track */
+  scrollbar-color: #9aa0a6 #e8eaed;
+  overflow: overlay; /* Chrome: scrollbar overlay tanpa geser konten */
 }
 
 .glass-card {

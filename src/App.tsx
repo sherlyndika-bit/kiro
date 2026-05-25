@@ -96,9 +96,9 @@ function App() {
   const isFullscreenPage = currentPage === 'chat-monitoring'
 
   return (
-    <div className="min-h-screen bg-background text-on-background">
+    <div className="h-screen overflow-hidden bg-background text-on-background">
       <Sidebar currentPage={currentPage} onPageChange={setCurrentPage} />
-      <main className="ml-[280px] min-h-screen flex flex-col">
+      <main className="ml-[280px] h-screen flex flex-col overflow-hidden">
         <TopBar title={pageTitles[currentPage]} />
         <PageErrorBoundary pageKey={currentPage}>
           {isFullscreenPage ? (

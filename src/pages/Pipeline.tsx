@@ -38,7 +38,8 @@ const Pipeline: React.FC = () => {
   ]
 
   return (
-    <div className="p-gutter max-w-container-max">
+    <div className="p-gutter">
+      {/* Header */}
       <div className="mb-md">
         <h1 className="font-display-lg text-display-lg font-bold text-on-background">
           Client Database
@@ -48,22 +49,39 @@ const Pipeline: React.FC = () => {
         </p>
       </div>
 
-      <div className="flex gap-md overflow-x-auto pb-md">
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-md mb-md">
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+          <div className="text-label-caps text-outline uppercase mb-1">Total Pipeline Value</div>
+          <div className="font-display-lg text-[28px] font-bold">Rp 1.65B</div>
+        </div>
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+          <div className="text-label-caps text-outline uppercase mb-1">Conversion Rate</div>
+          <div className="font-display-lg text-[28px] font-bold text-emerald-600">32%</div>
+        </div>
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+          <div className="text-label-caps text-outline uppercase mb-1">Avg. Deal Size</div>
+          <div className="font-display-lg text-[28px] font-bold">Rp 245M</div>
+        </div>
+      </div>
+
+      {/* Kanban board — horizontal scroll, kolom sama tinggi */}
+      <div className="flex gap-md overflow-x-auto pb-2 custom-scrollbar items-stretch">
         {stages.map((stage, i) => (
-          <div key={i} className="flex-shrink-0 w-72">
-            <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+          <div key={i} className="flex-shrink-0 w-72 flex flex-col">
+            <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col flex-1">
+              {/* Header kolom */}
               <div className="flex items-center justify-between mb-md">
                 <h3 className="font-headline-sm text-[14px] font-bold uppercase tracking-wide">
                   {stage.name}
                 </h3>
-                <span
-                  className={`px-2 py-1 rounded-full text-label-caps font-bold ${stage.color}`}
-                >
+                <span className={`px-2 py-1 rounded-full text-label-caps font-bold ${stage.color}`}>
                   {stage.count}
                 </span>
               </div>
 
-              <div className="space-y-sm">
+              {/* Card list — flex-1 agar isi push tombol ke bawah */}
+              <div className="flex flex-col gap-sm flex-1">
                 {stage.projects.map((p, idx) => (
                   <div
                     key={idx}
@@ -79,30 +97,16 @@ const Pipeline: React.FC = () => {
                   </div>
                 ))}
 
-                <button className="w-full py-2 border-2 border-dashed border-outline-variant rounded-lg text-outline hover:border-primary hover:text-primary transition-colors text-body-md">
-                  + Tambah
-                </button>
+                {/* Tombol tambah selalu di bawah */}
+                <div className="mt-auto pt-sm">
+                  <button className="w-full py-2 border-2 border-dashed border-outline-variant rounded-lg text-outline hover:border-primary hover:text-primary transition-colors text-body-md">
+                    + Tambah
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         ))}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-md mt-md">
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
-          <div className="text-label-caps text-outline uppercase mb-1">
-            Total Pipeline Value
-          </div>
-          <div className="font-display-lg text-[28px] font-bold">Rp 1.65B</div>
-        </div>
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
-          <div className="text-label-caps text-outline uppercase mb-1">Conversion Rate</div>
-          <div className="font-display-lg text-[28px] font-bold text-emerald-600">32%</div>
-        </div>
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
-          <div className="text-label-caps text-outline uppercase mb-1">Avg. Deal Size</div>
-          <div className="font-display-lg text-[28px] font-bold">Rp 245M</div>
-        </div>
       </div>
     </div>
   )

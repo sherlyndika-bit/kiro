@@ -72,10 +72,10 @@ const Estimator: React.FC = () => {
   }, [])
 
   return (
-    <div className="p-gutter max-w-container-max space-y-md">
+    <div className="p-gutter space-y-md">
       {/* Header */}
       <div>
-        <h1 className="font-display-lg text-display-lg font-bold text-on-background">
+        <h1 className="font-display-lg text-display-lg font-bold text-on-background select-none">
           AI Estimator
         </h1>
         <p className="text-body-md text-on-surface-variant">
@@ -113,9 +113,9 @@ const Estimator: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-md">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-md items-stretch">
         {/* STEP 1: RAB Konstruksi */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col">
           <div className="flex items-center gap-sm mb-md">
             <div className="w-9 h-9 rounded-lg bg-primary text-on-primary flex items-center justify-center font-bold">
               1
@@ -126,7 +126,7 @@ const Estimator: React.FC = () => {
             </div>
           </div>
 
-          <div className="space-y-md">
+          <div className="space-y-md flex-1 flex flex-col">
             <div>
               <label className="text-label-caps text-outline uppercase block mb-2">
                 Tipe & Kelas Bangunan
@@ -171,7 +171,7 @@ const Estimator: React.FC = () => {
 
             {/* Hasil RAB */}
             {rab && (
-              <div className="bg-surface-container rounded-lg p-md border border-outline-variant">
+              <div className="bg-surface-container rounded-lg p-md border border-outline-variant mt-auto">
                 <div className="text-label-caps text-outline uppercase mb-sm">
                   Estimasi RAB Konstruksi
                 </div>
@@ -204,7 +204,7 @@ const Estimator: React.FC = () => {
         </div>
 
         {/* STEP 2: Fee Jasa Desain */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col">
           <div className="flex items-center gap-sm mb-md">
             <div className="w-9 h-9 rounded-lg bg-primary text-on-primary flex items-center justify-center font-bold">
               2
