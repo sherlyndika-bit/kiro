@@ -157,30 +157,30 @@ export const ConversationService = {
 
   // Realtime subscription
   subscribeToConversations(callback: (conv: DBConversation) => void) {
-    return supabase
-      .channel('conversations-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'conversations' },
-        (payload) => callback(payload.new as DBConversation)
-      )
-      .subscribe()
+    const channel = supabase.channel('conversations-changes')
+    channel.on(
+      'postgres_changes' as any,
+      { event: '*', schema: 'public', table: 'conversations' },
+      (payload: any) => callback(payload.new as DBConversation)
+    )
+    channel.subscribe()
+    return channel
   },
 
   subscribeToMessages(conversationId: string, callback: (msg: DBMessage) => void) {
-    return supabase
-      .channel(`messages-${conversationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload) => callback(payload.new as DBMessage)
-      )
-      .subscribe()
+    const channel = supabase.channel(`messages-${conversationId}`)
+    channel.on(
+      'postgres_changes' as any,
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `conversation_id=eq.${conversationId}`,
+      },
+      (payload: any) => callback(payload.new as DBMessage)
+    )
+    channel.subscribe()
+    return channel
   },
 }
 

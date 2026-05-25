@@ -58,9 +58,11 @@ const ChatMonitoring: React.FC = () => {
   }
 
   const setupRealtimeConversations = () => {
-    const channel = supabase
-      .channel('conv-monitor')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, (payload) => {
+    const channel = supabase.channel('conv-monitor')
+    channel.on(
+      'postgres_changes' as any,
+      { event: '*', schema: 'public', table: 'conversations' },
+      (payload: any) => {
         if (payload.eventType === 'INSERT') {
           setConversations((prev) => [payload.new as DBConversation, ...prev])
         } else if (payload.eventType === 'UPDATE') {
@@ -68,22 +70,22 @@ const ChatMonitoring: React.FC = () => {
             prev.map((c) => (c.id === payload.new.id ? (payload.new as DBConversation) : c))
           )
         }
-      })
-      .subscribe()
+      }
+    )
+    channel.subscribe()
     return () => { supabase.removeChannel(channel) }
   }
 
   const setupRealtimeMessages = (convId: string) => {
-    const channel = supabase
-      .channel(`msg-${convId}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${convId}` },
-        (payload) => {
-          setMessages((prev) => [...prev, payload.new as DBMessage])
-        }
-      )
-      .subscribe()
+    const channel = supabase.channel(`msg-${convId}`)
+    channel.on(
+      'postgres_changes' as any,
+      { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${convId}` },
+      (payload: any) => {
+        setMessages((prev) => [...prev, payload.new as DBMessage])
+      }
+    )
+    channel.subscribe()
     return () => { supabase.removeChannel(channel) }
   }
 

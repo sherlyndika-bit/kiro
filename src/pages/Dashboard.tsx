@@ -23,15 +23,14 @@ const Dashboard: React.FC = () => {
     loadData()
 
     // Realtime subscription
-    const channel = supabase
-      .channel('dashboard-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => {
-        loadData()
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'documents' }, () => {
-        loadDocuments()
-      })
-      .subscribe()
+    const channel = supabase.channel('dashboard-realtime')
+    channel.on('postgres_changes' as any, { event: '*', schema: 'public', table: 'conversations' }, () => {
+      loadData()
+    })
+    channel.on('postgres_changes' as any, { event: 'INSERT', schema: 'public', table: 'documents' }, () => {
+      loadDocuments()
+    })
+    channel.subscribe()
 
     return () => {
       supabase.removeChannel(channel)
