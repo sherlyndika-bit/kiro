@@ -5,7 +5,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "wa-proposal",
-        "responseMode": "responseNode",
+        "responseMode": "immediately",
         "options": {}
       },
       "id": "webhook-proposal",
@@ -17,20 +17,7 @@
     },
     {
       "parameters": {
-        "respondWith": "text",
-        "responseBody": "OK",
-        "options": {}
-      },
-      "id": "respond-ok",
-      "name": "Respond OK",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [460, 160]
-    },
-
-    {
-      "parameters": {
-        "jsCode": "const body = $input.first().json;\nlet extracted = body.extracted;\nif (typeof extracted === 'string') {\n  try { extracted = JSON.parse(extracted); } catch(e) { extracted = {}; }\n}\n\nconst now = new Date();\nconst proposalNo = `SR-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;\n\nconst fmt = (n) => {\n  if (!n) return 'TBD';\n  if (n >= 1_000_000_000) return `Rp ${(n/1_000_000_000).toFixed(1)} M`;\n  if (n >= 1_000_000) return `Rp ${Math.round(n/1_000_000)} jt`;\n  return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n);\n};\n\nconst fmtFull = (n) => {\n  if (!n) return 'TBD';\n  return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n);\n};\n\nconst rabAvg = body.rabAvg || 0;\nconst feeAvg = body.feeAvg || (rabAvg * 0.07);\nconst ppn = feeAvg * 0.11;\nconst totalFee = feeAvg + ppn;\nconst dp30 = totalFee * 0.30;\nconst prog40 = totalFee * 0.40;\nconst final30 = totalFee * 0.30;\n\nconst buildingType = extracted.building_type || body.buildingType || 'Bangunan';\nconst tier = extracted.tier || body.tier || 'Standar';\nconst area = extracted.area_sqm || body.areaSqm || 100;\nconst serviceType = extracted.service_type || body.serviceCategory || 'Arsitektur';\n\nreturn [{\n  json: {\n    from: body.from,\n    clientName: body.clientName || 'Bapak/Ibu',\n    phoneNumberId: body.phoneNumberId,\n    proposalNo,\n    buildingType, tier, area, serviceType,\n    rabAvg, rabFmt: fmt(rabAvg),\n    feeAvg, feeFmt: fmt(feeAvg), feeFmtFull: fmtFull(feeAvg),\n    ppn, ppnFmt: fmt(ppn), ppnFmtFull: fmtFull(ppn),\n    totalFee, totalFeeFmt: fmt(totalFee), totalFeeFmtFull: fmtFull(totalFee),\n    dp30Fmt: fmtFull(dp30),\n    prog40Fmt: fmtFull(prog40),\n    final30Fmt: fmtFull(final30),\n    dateFormatted: now.toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}),\n    validUntil: new Date(now.getTime() + 14*24*60*60*1000).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'})\n  }\n}];"
+        "jsCode": "var body = $input.first().json;\nvar extracted = body.extracted;\nif (typeof extracted === 'string') {\n  try { extracted = JSON.parse(extracted); } catch(e) { extracted = {}; }\n}\n\nvar now = new Date();\nvar pad = function(n) { return String(n).padStart(2, '0'); };\nvar proposalNo = 'SR-' + now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate()) + '-' + pad(now.getHours()) + pad(now.getMinutes());\n\nvar fmt = function(n) {\n  if (!n) return 'TBD';\n  if (n >= 1000000000) return 'Rp ' + (n/1000000000).toFixed(1) + ' M';\n  if (n >= 1000000) return 'Rp ' + Math.round(n/1000000) + ' jt';\n  return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n);\n};\n\nvar fmtFull = function(n) {\n  if (!n) return 'TBD';\n  return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n);\n};\n\nvar rabAvg = body.rabAvg || 0;\nvar feeAvg = body.feeAvg || (rabAvg * 0.07);\nvar ppn = feeAvg * 0.11;\nvar totalFee = feeAvg + ppn;\nvar dp30 = totalFee * 0.30;\nvar prog40 = totalFee * 0.40;\nvar final30 = totalFee * 0.30;\n\nvar buildingType = extracted.building_type || body.buildingType || 'Bangunan';\nvar tier = extracted.tier || body.tier || 'Standar';\nvar area = extracted.area_sqm || body.areaSqm || 100;\nvar serviceType = extracted.service_type || body.serviceCategory || 'Arsitektur';\n\nvar validDate = new Date(now.getTime() + 14*24*60*60*1000);\nvar dateOpts = {day:'numeric',month:'long',year:'numeric'};\n\nreturn [{\n  json: {\n    from: body.from,\n    clientName: body.clientName || 'Bapak/Ibu',\n    phoneNumberId: body.phoneNumberId || '1052743247932102',\n    proposalNo: proposalNo,\n    buildingType: buildingType,\n    tier: tier,\n    area: area,\n    serviceType: serviceType,\n    rabAvg: rabAvg,\n    rabFmt: fmt(rabAvg),\n    feeAvg: feeAvg,\n    feeFmt: fmt(feeAvg),\n    feeFmtFull: fmtFull(feeAvg),\n    ppn: ppn,\n    ppnFmt: fmt(ppn),\n    ppnFmtFull: fmtFull(ppn),\n    totalFee: totalFee,\n    totalFeeFmt: fmt(totalFee),\n    totalFeeFmtFull: fmtFull(totalFee),\n    dp30Fmt: fmtFull(dp30),\n    prog40Fmt: fmtFull(prog40),\n    final30Fmt: fmtFull(final30),\n    dateFormatted: now.toLocaleDateString('id-ID', dateOpts),\n    validUntil: validDate.toLocaleDateString('id-ID', dateOpts)\n  }\n}];"
       },
       "id": "prepare-data",
       "name": "Prepare Proposal Data",
@@ -38,10 +25,9 @@
       "typeVersion": 2,
       "position": [460, 300]
     },
-
     {
       "parameters": {
-        "jsCode": "// Build HTML proposal yang akan di-convert ke PDF via Carbone atau html-pdf\nconst d = $json;\n\nconst html = `<!DOCTYPE html>\n<html lang=\"id\">\n<head>\n<meta charset=\"UTF-8\">\n<style>\n  * { margin: 0; padding: 0; box-sizing: border-box; }\n  body { font-family: 'Arial', sans-serif; font-size: 13px; color: #1a1a1a; }\n  .page { padding: 48px; max-width: 800px; margin: 0 auto; }\n  /* Header */\n  .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 24px; border-bottom: 3px solid #1a1a1a; margin-bottom: 32px; }\n  .brand h1 { font-size: 24px; font-weight: 900; letter-spacing: -0.5px; }\n  .brand p { font-size: 12px; color: #666; margin-top: 2px; }\n  .proposal-info { text-align: right; }\n  .proposal-info .no { font-size: 11px; color: #666; }\n  .proposal-info .date { font-size: 12px; margin-top: 4px; }\n  /* Title */\n  .title-section { margin-bottom: 32px; }\n  .title-section h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }\n  .title-section p { color: #555; font-size: 13px; }\n  /* Client box */\n  .client-box { background: #f5f5f5; border-left: 4px solid #1a1a1a; padding: 16px 20px; margin-bottom: 32px; border-radius: 0 4px 4px 0; }\n  .client-box .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: #888; margin-bottom: 4px; }\n  .client-box .value { font-size: 14px; font-weight: 600; }\n  /* Section */\n  .section { margin-bottom: 28px; }\n  .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #888; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e0e0e0; }\n  /* Table */\n  table { width: 100%; border-collapse: collapse; }\n  th { background: #1a1a1a; color: white; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }\n  td { padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 13px; }\n  tr:last-child td { border-bottom: none; }\n  .td-right { text-align: right; font-family: monospace; }\n  .row-total td { background: #f5f5f5; font-weight: 700; border-top: 2px solid #1a1a1a; }\n  .row-grand td { background: #1a1a1a; color: white; font-weight: 700; font-size: 14px; }\n  /* Payment */\n  .payment-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }\n  .payment-item { background: #f5f5f5; padding: 16px; border-radius: 4px; text-align: center; }\n  .payment-item .pct { font-size: 24px; font-weight: 900; }\n  .payment-item .label { font-size: 11px; color: #666; margin: 4px 0; }\n  .payment-item .amount { font-size: 12px; font-weight: 600; font-family: monospace; }\n  /* Timeline */\n  .timeline { display: flex; flex-direction: column; gap: 8px; }\n  .tl-item { display: flex; gap: 16px; align-items: flex-start; }\n  .tl-dot { width: 8px; height: 8px; border-radius: 50%; background: #1a1a1a; margin-top: 5px; flex-shrink: 0; }\n  .tl-content { font-size: 13px; }\n  .tl-content strong { font-weight: 600; }\n  /* Terms */\n  .terms-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }\n  .terms-list li { padding-left: 16px; position: relative; font-size: 12px; color: #444; }\n  .terms-list li::before { content: '—'; position: absolute; left: 0; color: #999; }\n  /* Footer */\n  .footer { margin-top: 48px; padding-top: 24px; border-top: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: flex-end; }\n  .signature { text-align: center; }\n  .sig-line { width: 160px; border-bottom: 1px solid #1a1a1a; margin: 40px auto 8px; }\n  .sig-label { font-size: 12px; color: #666; }\n  .validity { font-size: 11px; color: #999; text-align: right; }\n  .highlight { background: #f0f0f0; padding: 2px 6px; border-radius: 2px; font-family: monospace; font-size: 12px; }\n</style>\n</head>\n<body>\n<div class=\"page\">\n\n  <!-- Header -->\n  <div class=\"header\">\n    <div class=\"brand\">\n      <h1>Sudut Ruang</h1>\n      <p>Jasa Desain Arsitektur & Interior</p>\n    </div>\n    <div class=\"proposal-info\">\n      <div class=\"no\">No. Proposal</div>\n      <div class=\"date\"><strong class=\"highlight\">${d.proposalNo}</strong></div>\n      <div class=\"date\" style=\"margin-top:6px;color:#666\">${d.dateFormatted}</div>\n    </div>\n  </div>\n\n  <!-- Title -->\n  <div class=\"title-section\">\n    <h2>Proposal Jasa Desain ${d.buildingType}</h2>\n    <p>Estimasi biaya dan lingkup pekerjaan jasa desain ${d.serviceType.toLowerCase()} — ${d.tier}</p>\n  </div>\n\n  <!-- Client Info -->\n  <div class=\"client-box\">\n    <div class=\"label\">Dipersiapkan untuk</div>\n    <div class=\"value\">${d.clientName}</div>\n  </div>\n\n  <!-- Project Scope -->\n  <div class=\"section\">\n    <div class=\"section-title\">Lingkup Proyek</div>\n    <table>\n      <tr><th>Item</th><th>Detail</th></tr>\n      <tr><td>Tipe Bangunan</td><td>${d.buildingType} — ${d.tier}</td></tr>\n      <tr><td>Luas Area</td><td>${d.area} m²</td></tr>\n      <tr><td>Jenis Jasa</td><td>Desain ${d.serviceType}</td></tr>\n      <tr><td>Estimasi RAB Konstruksi</td><td class=\"td-right\">${d.rabFmt}</td></tr>\n    </table>\n  </div>\n\n  <!-- Fee Breakdown -->\n  <div class=\"section\">\n    <div class=\"section-title\">Rincian Biaya Jasa Desain</div>\n    <table>\n      <tr><th>Komponen</th><th style=\"text-align:right\">Jumlah</th></tr>\n      <tr><td>Fee Jasa Desain</td><td class=\"td-right\">${d.feeFmtFull}</td></tr>\n      <tr><td>PPN 11%</td><td class=\"td-right\">${d.ppnFmtFull}</td></tr>\n      <tr class=\"row-grand\"><td>Total Tagihan</td><td class=\"td-right\">${d.totalFeeFmtFull}</td></tr>\n    </table>\n    <p style=\"margin-top:10px;font-size:11px;color:#888\">* Biaya konstruksi (RAB) merupakan tanggung jawab owner/client terpisah dari fee jasa desain.</p>\n  </div>\n\n  <!-- Payment Terms -->\n  <div class=\"section\">\n    <div class=\"section-title\">Termin Pembayaran</div>\n    <div class=\"payment-grid\">\n      <div class=\"payment-item\">\n        <div class=\"pct\">30%</div>\n        <div class=\"label\">Down Payment</div>\n        <div class=\"amount\">${d.dp30Fmt}</div>\n        <div style=\"font-size:11px;color:#999;margin-top:4px\">Saat kontrak ditandatangani</div>\n      </div>\n      <div class=\"payment-item\">\n        <div class=\"pct\">40%</div>\n        <div class=\"label\">Progress Payment</div>\n        <div class=\"amount\">${d.prog40Fmt}</div>\n        <div style=\"font-size:11px;color:#999;margin-top:4px\">Saat gambar desain selesai</div>\n      </div>\n      <div class=\"payment-item\">\n        <div class=\"pct\">30%</div>\n        <div class=\"label\">Final Payment</div>\n        <div class=\"amount\">${d.final30Fmt}</div>\n        <div style=\"font-size:11px;color:#999;margin-top:4px\">Saat semua dokumen diserahkan</div>\n      </div>\n    </div>\n  </div>\n\n  <!-- Timeline -->\n  <div class=\"section\">\n    <div class=\"section-title\">Estimasi Timeline</div>\n    <div class=\"timeline\">\n      <div class=\"tl-item\"><div class=\"tl-dot\"></div><div class=\"tl-content\"><strong>Minggu 1–2:</strong> Konsultasi, pengukuran, dan brief desain</div></div>\n      <div class=\"tl-item\"><div class=\"tl-dot\"></div><div class=\"tl-content\"><strong>Minggu 3–4:</strong> Konsep desain & presentasi awal</div></div>\n      <div class=\"tl-item\"><div class=\"tl-dot\"></div><div class=\"tl-content\"><strong>Minggu 5–6:</strong> Revisi dan finalisasi desain</div></div>\n      <div class=\"tl-item\"><div class=\"tl-dot\"></div><div class=\"tl-content\"><strong>Minggu 7–8:</strong> Penyerahan dokumen lengkap (gambar kerja + RAB detail)</div></div>\n    </div>\n  </div>\n\n  <!-- Terms & Conditions -->\n  <div class=\"section\">\n    <div class=\"section-title\">Ketentuan Umum</div>\n    <ul class=\"terms-list\">\n      <li>Proposal ini berlaku sampai dengan ${d.validUntil}.</li>\n      <li>Harga sewaktu-waktu dapat berubah mengikuti kondisi pasar material.</li>\n      <li>Biaya revisi di luar lingkup yang disepakati akan dikenakan biaya tambahan.</li>\n      <li>Hak cipta desain sepenuhnya milik Sudut Ruang sampai pelunasan lunas.</li>\n      <li>Estimasi RAB bersifat indikatif; RAB final dihitung setelah desain disetujui.</li>\n      <li>Perubahan lingkup pekerjaan harus disepakati secara tertulis oleh kedua pihak.</li>\n    </ul>\n  </div>\n\n  <!-- Signature -->\n  <div class=\"footer\">\n    <div class=\"signature\">\n      <div class=\"sig-line\"></div>\n      <div class=\"sig-label\">Sudut Ruang</div>\n      <div style=\"font-size:11px;color:#999;margin-top:2px\">Principal Architect</div>\n    </div>\n    <div class=\"signature\">\n      <div class=\"sig-line\"></div>\n      <div class=\"sig-label\">${d.clientName}</div>\n      <div style=\"font-size:11px;color:#999;margin-top:2px\">Client</div>\n    </div>\n    <div class=\"validity\">\n      <div>Proposal No. ${d.proposalNo}</div>\n      <div style=\"margin-top:4px\">Berlaku s/d ${d.validUntil}</div>\n    </div>\n  </div>\n\n</div>\n</body>\n</html>`;\n\nreturn [{ json: { ...$json, htmlContent: html } }];"
+        "jsCode": "var d = $json;\n\nvar html = '<!DOCTYPE html><html lang=\"id\"><head><meta charset=\"UTF-8\"><style>' +\n'* { margin: 0; padding: 0; box-sizing: border-box; }' +\n'body { font-family: Arial, sans-serif; font-size: 13px; color: #1a1a1a; }' +\n'.page { padding: 48px; max-width: 800px; margin: 0 auto; }' +\n'.header { display: flex; justify-content: space-between; padding-bottom: 24px; border-bottom: 3px solid #1a1a1a; margin-bottom: 32px; }' +\n'.brand h1 { font-size: 24px; font-weight: 900; }' +\n'.brand p { font-size: 12px; color: #666; }' +\n'.proposal-info { text-align: right; font-size: 12px; color: #666; }' +\n'h2 { font-size: 20px; margin-bottom: 8px; }' +\n'.client-box { background: #f5f5f5; border-left: 4px solid #1a1a1a; padding: 16px 20px; margin-bottom: 32px; }' +\n'.section { margin-bottom: 28px; }' +\n'.section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #888; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e0e0e0; }' +\n'table { width: 100%; border-collapse: collapse; }' +\n'th { background: #1a1a1a; color: white; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; }' +\n'td { padding: 10px 12px; border-bottom: 1px solid #eee; }' +\n'.td-right { text-align: right; font-family: monospace; }' +\n'.row-grand td { background: #1a1a1a; color: white; font-weight: 700; }' +\n'.payment-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }' +\n'.payment-item { background: #f5f5f5; padding: 16px; border-radius: 4px; text-align: center; }' +\n'.payment-item .pct { font-size: 24px; font-weight: 900; }' +\n'.payment-item .amount { font-size: 12px; font-weight: 600; }' +\n'.tl-item { display: flex; gap: 12px; margin-bottom: 8px; }' +\n'.tl-dot { width: 8px; height: 8px; border-radius: 50%; background: #1a1a1a; margin-top: 5px; flex-shrink: 0; }' +\n'.terms-list { list-style: none; }' +\n'.terms-list li { padding: 4px 0 4px 16px; position: relative; font-size: 12px; color: #444; }' +\n'.terms-list li::before { content: \"—\"; position: absolute; left: 0; color: #999; }' +\n'.footer { margin-top: 48px; padding-top: 24px; border-top: 1px solid #e0e0e0; display: flex; justify-content: space-between; }' +\n'.signature { text-align: center; }' +\n'.sig-line { width: 160px; border-bottom: 1px solid #1a1a1a; margin: 40px auto 8px; }' +\n'</style></head><body><div class=\"page\">' +\n'<div class=\"header\"><div class=\"brand\"><h1>Sudut Ruang</h1><p>Jasa Desain Arsitektur &amp; Interior</p></div>' +\n'<div class=\"proposal-info\"><div>No. Proposal</div><strong>' + d.proposalNo + '</strong><div>' + d.dateFormatted + '</div></div></div>' +\n'<h2>Proposal Jasa Desain ' + d.buildingType + '</h2>' +\n'<p style=\"color:#555;margin-bottom:32px\">Estimasi biaya jasa desain ' + d.serviceType.toLowerCase() + ' — ' + d.tier + '</p>' +\n'<div class=\"client-box\"><div style=\"font-size:10px;color:#888;text-transform:uppercase\">Dipersiapkan untuk</div><strong style=\"font-size:14px\">' + d.clientName + '</strong></div>' +\n'<div class=\"section\"><div class=\"section-title\">Lingkup Proyek</div>' +\n'<table><tr><th>Item</th><th>Detail</th></tr>' +\n'<tr><td>Tipe Bangunan</td><td>' + d.buildingType + ' — ' + d.tier + '</td></tr>' +\n'<tr><td>Luas Area</td><td>' + d.area + ' m&sup2;</td></tr>' +\n'<tr><td>Jenis Jasa</td><td>Desain ' + d.serviceType + '</td></tr>' +\n'<tr><td>Estimasi RAB Konstruksi</td><td class=\"td-right\">' + d.rabFmt + '</td></tr>' +\n'</table></div>' +\n'<div class=\"section\"><div class=\"section-title\">Rincian Biaya Jasa Desain</div>' +\n'<table><tr><th>Komponen</th><th style=\"text-align:right\">Jumlah</th></tr>' +\n'<tr><td>Fee Jasa Desain</td><td class=\"td-right\">' + d.feeFmtFull + '</td></tr>' +\n'<tr><td>PPN 11%</td><td class=\"td-right\">' + d.ppnFmtFull + '</td></tr>' +\n'<tr class=\"row-grand\"><td>Total Tagihan</td><td class=\"td-right\">' + d.totalFeeFmtFull + '</td></tr>' +\n'</table><p style=\"margin-top:10px;font-size:11px;color:#888\">* Biaya konstruksi (RAB) terpisah dari fee jasa desain.</p></div>' +\n'<div class=\"section\"><div class=\"section-title\">Termin Pembayaran</div>' +\n'<div class=\"payment-grid\">' +\n'<div class=\"payment-item\"><div class=\"pct\">30%</div><div>Down Payment</div><div class=\"amount\">' + d.dp30Fmt + '</div><div style=\"font-size:11px;color:#999\">Saat kontrak ditandatangani</div></div>' +\n'<div class=\"payment-item\"><div class=\"pct\">40%</div><div>Progress Payment</div><div class=\"amount\">' + d.prog40Fmt + '</div><div style=\"font-size:11px;color:#999\">Saat gambar desain selesai</div></div>' +\n'<div class=\"payment-item\"><div class=\"pct\">30%</div><div>Final Payment</div><div class=\"amount\">' + d.final30Fmt + '</div><div style=\"font-size:11px;color:#999\">Saat dokumen diserahkan</div></div>' +\n'</div></div>' +\n'<div class=\"section\"><div class=\"section-title\">Estimasi Timeline</div>' +\n'<div class=\"tl-item\"><div class=\"tl-dot\"></div><div><strong>Minggu 1-2:</strong> Konsultasi, pengukuran, dan brief desain</div></div>' +\n'<div class=\"tl-item\"><div class=\"tl-dot\"></div><div><strong>Minggu 3-4:</strong> Konsep desain &amp; presentasi awal</div></div>' +\n'<div class=\"tl-item\"><div class=\"tl-dot\"></div><div><strong>Minggu 5-6:</strong> Revisi dan finalisasi desain</div></div>' +\n'<div class=\"tl-item\"><div class=\"tl-dot\"></div><div><strong>Minggu 7-8:</strong> Penyerahan dokumen lengkap</div></div>' +\n'</div>' +\n'<div class=\"section\"><div class=\"section-title\">Ketentuan Umum</div>' +\n'<ul class=\"terms-list\">' +\n'<li>Proposal berlaku sampai ' + d.validUntil + '.</li>' +\n'<li>Harga dapat berubah mengikuti kondisi pasar material.</li>' +\n'<li>Revisi di luar lingkup dikenakan biaya tambahan.</li>' +\n'<li>Hak cipta desain milik Sudut Ruang sampai pelunasan lunas.</li>' +\n'<li>Perubahan lingkup harus disepakati secara tertulis.</li>' +\n'</ul></div>' +\n'<div class=\"footer\">' +\n'<div class=\"signature\"><div class=\"sig-line\"></div><div>Sudut Ruang</div><div style=\"font-size:11px;color:#999\">Principal Architect</div></div>' +\n'<div class=\"signature\"><div class=\"sig-line\"></div><div>' + d.clientName + '</div><div style=\"font-size:11px;color:#999\">Client</div></div>' +\n'</div>' +\n'</div></body></html>';\n\nreturn [{ json: { ...$json, htmlContent: html } }];"
       },
       "id": "build-html",
       "name": "Build HTML Proposal",
@@ -49,35 +35,13 @@
       "typeVersion": 2,
       "position": [680, 300]
     },
-
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.carbone.io/render",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "contentType": "json",
-        "body": "={\n  \"data\": {\n    \"proposalNo\": \"{{ $json.proposalNo }}\",\n    \"clientName\": \"{{ $json.clientName }}\",\n    \"dateFormatted\": \"{{ $json.dateFormatted }}\",\n    \"validUntil\": \"{{ $json.validUntil }}\",\n    \"buildingType\": \"{{ $json.buildingType }}\",\n    \"tier\": \"{{ $json.tier }}\",\n    \"area\": {{ $json.area }},\n    \"serviceType\": \"{{ $json.serviceType }}\",\n    \"rabFmt\": \"{{ $json.rabFmt }}\",\n    \"feeFmtFull\": \"{{ $json.feeFmtFull }}\",\n    \"ppnFmtFull\": \"{{ $json.ppnFmtFull }}\",\n    \"totalFeeFmtFull\": \"{{ $json.totalFeeFmtFull }}\",\n    \"dp30Fmt\": \"{{ $json.dp30Fmt }}\",\n    \"prog40Fmt\": \"{{ $json.prog40Fmt }}\",\n    \"final30Fmt\": \"{{ $json.final30Fmt }}\"\n  },\n  \"convertTo\": \"pdf\",\n  \"reportName\": \"{{ $json.proposalNo }}\"\n}",
-        "options": {}
-      },
-      "id": "carbone-render",
-      "name": "Carbone — Render PDF",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [900, 200],
-      "credentials": {
-        "httpHeaderAuth": { "id": "carbone-key", "name": "Carbone API Key" }
-      },
-      "notes": "Carbone.io gratis 100 render/bulan.\nDaftar di https://carbone.io -> API key di Settings.\nCredentials: Header Name = 'carbone-version', Value = '4'\nAuthorization header = 'Bearer YOUR_CARBONE_KEY'\n\nUntuk memakai ini, perlu upload template .docx dulu ke Carbone,\nlalu ganti URL ke /render/{templateId}.\nAlternatif: pakai node HTML-to-PDF di bawah."
-    },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api.html2pdf.app/v1/generate",
         "sendBody": true,
-        "contentType": "json",
-        "body": "={\n  \"html\": {{ JSON.stringify($json.htmlContent) }},\n  \"apiKey\": \"{{ $vars.HTML2PDF_API_KEY }}\",\n  \"fileName\": \"Proposal-{{ $json.proposalNo }}.pdf\",\n  \"format\": \"A4\",\n  \"marginTop\": \"0\",\n  \"marginBottom\": \"0\",\n  \"marginLeft\": \"0\",\n  \"marginRight\": \"0\"\n}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"html\": {{ JSON.stringify($json.htmlContent) }},\n  \"apiKey\": \"{{ $vars.HTML2PDF_API_KEY }}\",\n  \"fileName\": \"Proposal-{{ $json.proposalNo }}.pdf\",\n  \"format\": \"A4\"\n}",
         "options": {
           "response": {
             "response": {
@@ -91,23 +55,13 @@
       "name": "HTML2PDF — Generate PDF",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 400],
-      "notes": "Alternatif Carbone. Gratis tier tersedia di https://html2pdf.app\nAPI Key simpan di n8n Variables: $vars.HTML2PDF_API_KEY\n\nOutput: binary file 'pdfFile' yang siap di-upload ke WA."
-    },
-    {
-      "parameters": {
-        "jsCode": "// Coba pakai hasil Carbone dulu, fallback ke html2pdf\n// Di production, pilih salah satu dan disable yang lain\n\nconst carboneResult = $('Carbone — Render PDF').first()?.json;\nconst html2pdfResult = $('HTML2PDF — Generate PDF').first()?.binary?.pdfFile;\n\n// Determine PDF source\nlet pdfReady = false;\nlet pdfBinary = null;\nlet pdfUrl = null;\n\nif (html2pdfResult) {\n  pdfBinary = html2pdfResult;\n  pdfReady = true;\n}\n\n// Log untuk debugging\nconsole.log('PDF ready:', pdfReady);\n\nreturn [{\n  json: {\n    ...$('Prepare Proposal Data').first().json,\n    pdfReady,\n    pdfUrl\n  },\n  binary: pdfBinary ? { pdfFile: pdfBinary } : undefined\n}];"
-      },
-      "id": "check-pdf",
-      "name": "Check PDF Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1120, 300]
+      "position": [900, 300],
+      "notes": "Daftar di https://html2pdf.app\nSimpan API key di n8n: Settings > Variables > HTML2PDF_API_KEY"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://graph.facebook.com/v19.0/{{ $json.phoneNumberId }}/media",
+        "url": "=https://graph.facebook.com/v19.0/1052743247932102/media",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -125,28 +79,27 @@
       "name": "WA — Upload PDF to Meta",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, 200],
+      "position": [1120, 160],
       "credentials": {
         "httpHeaderAuth": { "id": "meta-wa-token", "name": "Meta WA Bearer Token" }
-      },
-      "notes": "Upload PDF ke Meta Media API dulu,\ndapat media_id, baru kirim ke client."
+      }
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://graph.facebook.com/v19.0/{{ $json.phoneNumberId }}/messages",
+        "url": "=https://graph.facebook.com/v19.0/1052743247932102/messages",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
-        "contentType": "json",
-        "body": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.from }}\",\n  \"type\": \"document\",\n  \"document\": {\n    \"id\": \"{{ $('WA — Upload PDF to Meta').first().json.id }}\",\n    \"filename\": \"Proposal-{{ $json.proposalNo }}.pdf\",\n    \"caption\": \"Halo {{ $json.clientName.split(' ')[0] }}, ini proposal lengkap dari Sudut Ruang.\\n\\nNo. Proposal: {{ $json.proposalNo }}\\nBerlaku sampai: {{ $json.validUntil }}\\n\\nKalau ada yang perlu didiskusikan, langsung balas aja ya.\"\n  }\n}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.from }}\",\n  \"type\": \"document\",\n  \"document\": {\n    \"id\": \"{{ $('WA — Upload PDF to Meta').first().json.id }}\",\n    \"filename\": \"Proposal-{{ $json.proposalNo }}.pdf\",\n    \"caption\": {{ JSON.stringify('Halo ' + $json.clientName.split(' ')[0] + ', ini proposal lengkap dari Sudut Ruang.\\n\\nNo. Proposal: ' + $json.proposalNo + '\\nBerlaku sampai: ' + $json.validUntil + '\\n\\nKalau ada yang perlu didiskusikan, langsung balas aja ya.') }}\n  }\n}",
         "options": {}
       },
       "id": "wa-send-doc",
       "name": "WA — Send PDF to Client",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1560, 200],
+      "position": [1340, 160],
       "credentials": {
         "httpHeaderAuth": { "id": "meta-wa-token", "name": "Meta WA Bearer Token" }
       }
@@ -185,10 +138,10 @@
         "options": {}
       },
       "id": "sheets-log-proposal",
-      "name": "Sheets — Log Proposal History",
+      "name": "Sheets — Log Proposal",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1560, 400],
+      "position": [1340, 360],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "google-sheets-cred",
@@ -226,7 +179,7 @@
       "name": "Sheets — Update Client Status",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1560, 580],
+      "position": [1340, 540],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "google-sheets-cred",
@@ -237,18 +190,17 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://localhost:3000/webhook/incoming-conversation",
+        "url": "https://n8n.srv1696073.hstgr.cloud/webhook/incoming-conversation",
         "sendBody": true,
-        "contentType": "json",
-        "body": "={\n  \"conversationId\": \"{{ $json.from }}\",\n  \"clientName\": \"{{ $json.clientName }}\",\n  \"source\": \"whatsapp\",\n  \"lastMessage\": \"Proposal {{ $json.proposalNo }} telah dikirim\",\n  \"mode\": \"ai\",\n  \"intent\": \"PROPOSAL_SENT\",\n  \"metadata\": {\n    \"proposalNo\": \"{{ $json.proposalNo }}\",\n    \"totalFee\": \"{{ $json.totalFeeFmt }}\",\n    \"validUntil\": \"{{ $json.validUntil }}\",\n    \"buildingType\": \"{{ $json.buildingType }}\"\n  },\n  \"timestamp\": \"{{ $now }}\"\n}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"conversationId\": \"{{ $json.from }}\",\n  \"clientName\": {{ JSON.stringify($json.clientName) }},\n  \"source\": \"whatsapp\",\n  \"lastMessage\": \"Proposal {{ $json.proposalNo }} telah dikirim\",\n  \"mode\": \"ai\",\n  \"intent\": \"PROPOSAL_SENT\",\n  \"metadata\": {\n    \"proposalNo\": \"{{ $json.proposalNo }}\",\n    \"totalFee\": \"{{ $json.totalFeeFmt }}\",\n    \"validUntil\": \"{{ $json.validUntil }}\",\n    \"buildingType\": \"{{ $json.buildingType }}\"\n  },\n  \"timestamp\": \"{{ $now }}\"\n}",
         "options": {}
       },
       "id": "notify-dashboard",
       "name": "Notify Dashboard",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1560, 740],
-      "notes": "Ganti localhost:3000 dengan URL dashboard Anda di VPS."
+      "position": [1340, 720]
     },
     {
       "parameters": {
@@ -259,25 +211,24 @@
       "name": "Wait 2 Days",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1,
-      "position": [1780, 300],
-      "notes": "Auto follow-up 2 hari setelah proposal dikirim"
+      "position": [1560, 300]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://graph.facebook.com/v19.0/{{ $json.phoneNumberId }}/messages",
+        "url": "=https://graph.facebook.com/v19.0/1052743247932102/messages",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
-        "contentType": "json",
-        "body": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.from }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"Halo {{ $json.clientName.split(' ')[0] }}, mau follow up proposal {{ $json.proposalNo }} yang kita kirim 2 hari lalu.\\n\\nSudah sempat dibaca? Kalau ada pertanyaan atau mau diskusi lebih lanjut, langsung balas aja ya.\"\n  }\n}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.from }}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": {{ JSON.stringify('Halo ' + $json.clientName.split(' ')[0] + ', mau follow up proposal ' + $json.proposalNo + ' yang kita kirim 2 hari lalu.\\n\\nSudah sempat dibaca? Kalau ada pertanyaan atau mau diskusi lebih lanjut, langsung balas aja ya.') }} }\n}",
         "options": {}
       },
       "id": "wa-followup",
       "name": "WA — Auto Follow-up",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2000, 300],
+      "position": [1780, 300],
       "credentials": {
         "httpHeaderAuth": { "id": "meta-wa-token", "name": "Meta WA Bearer Token" }
       }
@@ -286,10 +237,7 @@
   "connections": {
     "Webhook — Trigger Proposal": {
       "main": [
-        [
-          { "node": "Respond OK", "type": "main", "index": 0 },
-          { "node": "Prepare Proposal Data", "type": "main", "index": 0 }
-        ]
+        [{ "node": "Prepare Proposal Data", "type": "main", "index": 0 }]
       ]
     },
     "Prepare Proposal Data": {
@@ -299,28 +247,23 @@
     },
     "Build HTML Proposal": {
       "main": [
-        [
-          { "node": "Carbone — Render PDF", "type": "main", "index": 0 },
-          { "node": "HTML2PDF — Generate PDF", "type": "main", "index": 0 }
-        ]
+        [{ "node": "HTML2PDF — Generate PDF", "type": "main", "index": 0 }]
       ]
     },
-    "Carbone — Render PDF": {
-      "main": [[{ "node": "Check PDF Result", "type": "main", "index": 0 }]]
-    },
     "HTML2PDF — Generate PDF": {
-      "main": [[{ "node": "Check PDF Result", "type": "main", "index": 0 }]]
-    },
-    "Check PDF Result": {
-      "main": [[{ "node": "WA — Upload PDF to Meta", "type": "main", "index": 0 }]]
+      "main": [
+        [{ "node": "WA — Upload PDF to Meta", "type": "main", "index": 0 }]
+      ]
     },
     "WA — Upload PDF to Meta": {
-      "main": [[{ "node": "WA — Send PDF to Client", "type": "main", "index": 0 }]]
+      "main": [
+        [{ "node": "WA — Send PDF to Client", "type": "main", "index": 0 }]
+      ]
     },
     "WA — Send PDF to Client": {
       "main": [
         [
-          { "node": "Sheets — Log Proposal History", "type": "main", "index": 0 },
+          { "node": "Sheets — Log Proposal", "type": "main", "index": 0 },
           { "node": "Sheets — Update Client Status", "type": "main", "index": 0 },
           { "node": "Notify Dashboard", "type": "main", "index": 0 },
           { "node": "Wait 2 Days", "type": "main", "index": 0 }
@@ -328,7 +271,9 @@
       ]
     },
     "Wait 2 Days": {
-      "main": [[{ "node": "WA — Auto Follow-up", "type": "main", "index": 0 }]]
+      "main": [
+        [{ "node": "WA — Auto Follow-up", "type": "main", "index": 0 }]
+      ]
     }
   },
   "settings": {

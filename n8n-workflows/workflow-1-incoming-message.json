@@ -5,7 +5,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "wa-incoming",
-        "responseMode": "responseNode",
+        "responseMode": "immediately",
         "options": {}
       },
       "id": "webhook-incoming",
@@ -13,24 +13,11 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [240, 300],
-      "notes": "Paste URL ini ke Meta WA webhook settings.\nFormat Meta: { entry[0].changes[0].value.messages[0] }"
+      "notes": "Production URL: https://n8n.srv1696073.hstgr.cloud/webhook/wa-incoming\nPaste URL ini ke Meta WA webhook settings."
     },
     {
       "parameters": {
-        "respondWith": "text",
-        "responseBody": "OK",
-        "options": {}
-      },
-      "id": "respond-meta",
-      "name": "Respond 200 to Meta",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [460, 160],
-      "notes": "Meta butuh 200 OK dalam <1 detik, jadi respond dulu baru proses"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Parse struktur pesan dari Meta WhatsApp Business API\nconst body = $input.first().json;\n\n// Handle Meta webhook verification (GET request)\nif ($input.first().json['hub.mode']) {\n  return [{ json: { isVerification: true, challenge: body['hub.challenge'] } }];\n}\n\n// Extract pesan\nconst entry = body?.entry?.[0];\nconst change = entry?.changes?.[0];\nconst value = change?.value;\nconst message = value?.messages?.[0];\n\nif (!message) {\n  return [{ json: { skip: true, reason: 'No message found' } }];\n}\n\n// Skip jika bukan text message\nif (message.type !== 'text') {\n  return [{ json: { skip: true, reason: 'Non-text message: ' + message.type } }];\n}\n\nconst contact = value?.contacts?.[0];\n\nreturn [{\n  json: {\n    skip: false,\n    messageId: message.id,\n    from: message.from, // nomor WA client (628xxx)\n    clientName: contact?.profile?.name || 'Pelanggan',\n    text: message.text.body,\n    timestamp: message.timestamp,\n    phoneNumberId: value.metadata.phone_number_id,\n    waBusinessId: value.metadata.display_phone_number\n  }\n}];"
+        "jsCode": "// Parse struktur pesan dari Meta WhatsApp Business API\n// Handle dua format: langsung dari Meta atau wrapped dari Hoppscotch/test\nconst raw = $input.first().json;\nconst body = raw.body ? raw.body : raw;\n\n// Handle Meta webhook verification (GET request)\nif (body['hub.mode']) {\n  return [{ json: { isVerification: true, challenge: body['hub.challenge'] } }];\n}\n\n// Extract pesan\nconst entry = body && body.entry && body.entry[0];\nconst change = entry && entry.changes && entry.changes[0];\nconst value = change && change.value;\nconst message = value && value.messages && value.messages[0];\n\nif (!message) {\n  return [{ json: { skip: true, reason: 'No message found' } }];\n}\n\n// Skip jika bukan text message\nif (message.type !== 'text') {\n  return [{ json: { skip: true, reason: 'Non-text message: ' + message.type } }];\n}\n\nconst contact = value.contacts && value.contacts[0];\n\nreturn [{\n  json: {\n    skip: false,\n    messageId: message.id,\n    from: message.from,\n    clientName: contact && contact.profile ? contact.profile.name : 'Pelanggan',\n    text: message.text.body,\n    timestamp: message.timestamp,\n    phoneNumberId: value.metadata.phone_number_id || '1052743247932102',\n    waBusinessId: value.metadata.display_phone_number\n  }\n}];"
       },
       "id": "parse-message",
       "name": "Parse Meta Payload",
@@ -65,8 +52,8 @@
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
-        "contentType": "json",
-        "body": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"temperature\": 0.1,\n  \"max_tokens\": 300,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Kamu adalah AI classifier untuk bisnis jasa desain arsitektur & interior bernama Sudut Ruang.\\n\\nTugasmu: Analisis pesan WhatsApp dari calon klien dan tentukan intent + ekstrak data.\\n\\nKembalikan HANYA JSON valid tanpa penjelasan apapun.\\n\\nFormat response:\\n{\\n  \\\"intent\\\": \\\"GREETING\\\" | \\\"ASK_PRICE\\\" | \\\"REQUEST_PROPOSAL\\\" | \\\"FOLLOW_UP\\\" | \\\"GENERAL_QUESTION\\\" | \\\"OTHER\\\",\\n  \\\"confidence\\\": 0.0-1.0,\\n  \\\"extracted\\\": {\\n    \\\"building_type\\\": \\\"rumah\\\" | \\\"cafe\\\" | \\\"restoran\\\" | \\\"kantor\\\" | \\\"villa\\\" | \\\"ruko\\\" | \\\"renovasi\\\" | null,\\n    \\\"tier\\\": \\\"ekonomi\\\" | \\\"standar\\\" | \\\"menengah\\\" | \\\"premium\\\" | null,\\n    \\\"area_sqm\\\": number | null,\\n    \\\"service_type\\\": \\\"arsitektur\\\" | \\\"interior\\\" | \\\"komersial\\\" | \\\"lansekap\\\" | \\\"pengawasan\\\" | null,\\n    \\\"client_name_mentioned\\\": string | null\\n  },\\n  \\\"needs_human\\\": false,\\n  \\\"reason\\\": \\\"singkat kenapa intent ini\\\"\\n}\\n\\nContoh:\\n- \\\"Halo kak mau tanya harga\\\" -> GREETING\\n- \\\"Berapa biaya desain cafe 80m2\\\" -> ASK_PRICE, cafe, 80\\n- \\\"Bisa dibuatkan proposal?\\\" -> REQUEST_PROPOSAL\\n- \\\"Kapan bisa survey?\\\" -> GENERAL_QUESTION, needs_human: true\\n- \\\"Komplen soal hasil kerja\\\" -> OTHER, needs_human: true\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.text) }}\n    }\n  ]\n}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"temperature\": 0.1,\n  \"max_tokens\": 400,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Kamu adalah AI classifier untuk bisnis jasa desain arsitektur dan interior bernama Sudut Ruang. Tugasmu: Analisis pesan WhatsApp dari calon klien dan tentukan intent serta ekstrak data. Kembalikan HANYA JSON valid tanpa penjelasan apapun. Format response: {\\\"intent\\\": \\\"GREETING atau ASK_PRICE atau REQUEST_PROPOSAL atau FOLLOW_UP atau GENERAL_QUESTION atau OTHER\\\", \\\"confidence\\\": 0.9, \\\"extracted\\\": {\\\"building_type\\\": \\\"rumah atau cafe atau restoran atau kantor atau villa atau ruko atau renovasi atau null\\\", \\\"tier\\\": \\\"ekonomi atau standar atau menengah atau premium atau null\\\", \\\"area_sqm\\\": null, \\\"service_type\\\": \\\"arsitektur atau interior atau komersial atau lansekap atau pengawasan atau null\\\"}, \\\"needs_human\\\": false, \\\"reason\\\": \\\"alasan singkat\\\"}. Contoh: Halo kak mau tanya harga -> GREETING. Berapa biaya desain cafe 80m2 -> ASK_PRICE building_type cafe area_sqm 80. Bisa dibuatkan proposal -> REQUEST_PROPOSAL. Kapan bisa survey -> GENERAL_QUESTION needs_human true.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.text) }}\n    }\n  ]\n}",
         "options": {}
       },
       "id": "groq-classifier",
@@ -81,7 +68,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse JSON response dari Groq HTTP API\n// Response format: { choices: [{ message: { content: '...' } }] }\nconst groqResponse = $input.first().json;\nconst raw = groqResponse?.choices?.[0]?.message?.content || '';\n\nlet classification;\ntry {\n  // Bersihkan markdown code block jika ada\n  const cleaned = raw\n    .replace(/```json\\n?/g, '')\n    .replace(/```\\n?/g, '')\n    .trim();\n  classification = JSON.parse(cleaned);\n} catch (e) {\n  // Fallback jika parse gagal\n  classification = {\n    intent: 'OTHER',\n    confidence: 0.5,\n    extracted: {},\n    needs_human: true,\n    reason: 'Failed to parse AI response: ' + e.message\n  };\n}\n\n// Ambil data pesan asli dari node sebelumnya\nconst messageData = $('Parse Meta Payload').first().json;\n\nreturn [{\n  json: {\n    ...messageData,\n    intent: classification.intent || 'OTHER',\n    confidence: classification.confidence || 0.5,\n    extracted: classification.extracted || {},\n    needs_human: classification.needs_human || false,\n    classifierReason: classification.reason || ''\n  }\n}];"
+        "jsCode": "// Parse JSON response dari Groq HTTP API\nconst groqResponse = $input.first().json;\nconst raw = groqResponse && groqResponse.choices && groqResponse.choices[0] && groqResponse.choices[0].message ? groqResponse.choices[0].message.content : '';\n\nlet classification;\ntry {\n  const cleaned = raw\n    .replace(/```json\\n?/g, '')\n    .replace(/```\\n?/g, '')\n    .trim();\n  classification = JSON.parse(cleaned);\n} catch (e) {\n  classification = {\n    intent: 'OTHER',\n    confidence: 0.5,\n    extracted: {},\n    needs_human: true,\n    reason: 'Failed to parse: ' + e.message\n  };\n}\n\nconst messageData = $('Parse Meta Payload').first().json;\n\nreturn [{\n  json: {\n    ...messageData,\n    intent: classification.intent || 'OTHER',\n    confidence: classification.confidence || 0.5,\n    extracted: classification.extracted || {},\n    needs_human: classification.needs_human || false,\n    classifierReason: classification.reason || ''\n  }\n}];"
       },
       "id": "parse-classification",
       "name": "Parse Classification Result",
@@ -157,43 +144,43 @@
     },
     {
       "parameters": {
-        "jsCode": "// Balas greeting dengan sambutan\nconst name = $json.clientName || 'kak';\nconst firstName = name.split(' ')[0];\n\nconst replies = [\n  `Halo ${firstName}, makasih udah hubungi Sudut Ruang!\\n\\nKita bantu desain arsitektur & interior buat rumah, cafe, kantor, villa, dan lainnya.\\n\\nAda yang bisa kita bantu? Ceritain dulu proyek yang lagi direncanain.`,\n  `Hai ${firstName}! Selamat datang di Sudut Ruang.\\n\\nKita spesialis di jasa desain arsitektur & interior. Mau bangun atau renovasi apa nih?`,\n];\n\n// Random reply biar tidak monoton\nconst reply = replies[Math.floor(Math.random() * replies.length)];\n\nreturn [{ json: { ...$json, replyText: reply } }];"
+        "jsCode": "const name = $json.clientName || 'kak';\nconst firstName = name.split(' ')[0];\n\nconst replies = [\n  'Halo ' + firstName + ', makasih udah hubungi Sudut Ruang!\\n\\nKita bantu desain arsitektur & interior buat rumah, cafe, kantor, villa, dan lainnya.\\n\\nAda yang bisa kita bantu? Ceritain dulu proyek yang lagi direncanain.',\n  'Hai ' + firstName + '! Selamat datang di Sudut Ruang.\\n\\nKita spesialis di jasa desain arsitektur & interior. Mau bangun atau renovasi apa nih?',\n];\n\nconst reply = replies[Math.floor(Math.random() * replies.length)];\n\nreturn [{ json: { ...$json, replyText: reply } }];"
       },
       "id": "build-greeting-reply",
       "name": "Build Greeting Reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1560, 100]
+      "position": [1560, 60]
     },
     {
       "parameters": {
-        "jsCode": "// Kalau data lengkap (ada tipe + luas), langsung trigger estimator\n// Kalau tidak lengkap, tanya info tambahan\nconst extracted = $json.extracted || {};\nconst hasType = !!extracted.building_type;\nconst hasArea = !!extracted.area_sqm;\n\nlet replyText;\n\nif (hasType && hasArea) {\n  // Data cukup, flag untuk trigger workflow estimator\n  replyText = null; // akan di-handle oleh workflow 2\n  return [{ json: { ...$json, triggerEstimator: true } }];\n}\n\nif (hasType && !hasArea) {\n  replyText = `Oke, desain ${extracted.building_type} ya.\\n\\nBerapa luas areanya kak? (dalam m2)`;\n} else if (!hasType && hasArea) {\n  replyText = `Noted ${extracted.area_sqm}m2.\\n\\nIni rencananya untuk apa? Rumah tinggal, cafe, kantor, atau yang lain?`;\n} else {\n  replyText = `Boleh ceritain dulu proyeknya:\\n1. Jenis bangunan (rumah/cafe/kantor/villa/renovasi)\\n2. Luas area (m2)\\n3. Kelas material (standar/menengah/premium)\\n\\nBiar kita bisa kasih estimasi yang akurat.`;\n}\n\nreturn [{ json: { ...$json, triggerEstimator: false, replyText } }];"
+        "jsCode": "const extracted = $json.extracted || {};\nconst hasType = !!extracted.building_type;\nconst hasArea = !!extracted.area_sqm;\n\nif (hasType && hasArea) {\n  return [{ json: { ...$json, triggerEstimator: true, replyText: null } }];\n}\n\nlet replyText;\nif (hasType && !hasArea) {\n  replyText = 'Oke, desain ' + extracted.building_type + ' ya.\\n\\nBerapa luas areanya kak? (dalam m2)';\n} else if (!hasType && hasArea) {\n  replyText = 'Noted ' + extracted.area_sqm + 'm2.\\n\\nIni rencananya untuk apa? Rumah tinggal, cafe, kantor, atau yang lain?';\n} else {\n  replyText = 'Boleh ceritain dulu proyeknya:\\n1. Jenis bangunan (rumah/cafe/kantor/villa/renovasi)\\n2. Luas area (m2)\\n3. Kelas material (standar/menengah/premium)\\n\\nBiar kita bisa kasih estimasi yang akurat.';\n}\n\nreturn [{ json: { ...$json, triggerEstimator: false, replyText } }];"
       },
       "id": "check-price-data",
       "name": "Check Data Completeness",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1560, 300]
+      "position": [1560, 240]
     },
     {
       "parameters": {
-        "jsCode": "// Balas request proposal\nconst name = $json.clientName || 'kak';\nconst firstName = name.split(' ')[0];\n\nconst replyText = `Siap ${firstName}, kita buatkan proposal lengkapnya.\\n\\nBoleh konfirmasi dulu:\\n1. Nama lengkap\\n2. Jenis proyek & lokasi\\n3. Luas area (m2)\\n4. Budget range yang disiapkan\\n\\nProposal akan kita kirim dalam 1x24 jam.`;\n\nreturn [{ json: { ...$json, replyText, triggerProposal: true } }];"
+        "jsCode": "const name = $json.clientName || 'kak';\nconst firstName = name.split(' ')[0];\n\nconst replyText = 'Siap ' + firstName + ', kita buatkan proposal lengkapnya.\\n\\nBoleh konfirmasi dulu:\\n1. Nama lengkap\\n2. Jenis proyek & lokasi\\n3. Luas area (m2)\\n4. Budget range yang disiapkan\\n\\nProposal akan kita kirim dalam 1x24 jam.';\n\nreturn [{ json: { ...$json, replyText, triggerProposal: true } }];"
       },
       "id": "build-proposal-reply",
       "name": "Build Proposal Reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1560, 480]
+      "position": [1560, 420]
     },
     {
       "parameters": {
-        "jsCode": "// Notifikasi dashboard bahwa butuh human\nconst name = $json.clientName || 'Pelanggan';\n\nreturn [{\n  json: {\n    ...$json,\n    replyText: null, // Tidak auto-reply, tunggu human\n    dashboardAlert: {\n      priority: 'high',\n      reason: $json.classifierReason || 'Needs human review',\n      clientName: name,\n      lastMessage: $json.text,\n      conversationId: $json.from\n    }\n  }\n}];"
+        "jsCode": "const name = $json.clientName || 'Pelanggan';\n\nreturn [{\n  json: {\n    ...$json,\n    replyText: null,\n    dashboardAlert: {\n      priority: 'high',\n      reason: $json.classifierReason || 'Needs human review',\n      clientName: name,\n      lastMessage: $json.text,\n      conversationId: $json.from\n    }\n  }\n}];"
       },
       "id": "flag-human-needed",
       "name": "Flag for Human Review",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1560, 660]
+      "position": [1560, 600]
     },
     {
       "parameters": {
@@ -211,94 +198,82 @@
       "name": "Has Reply Text?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1780, 300]
+      "position": [1780, 240]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://graph.facebook.com/v19.0/{{ $json.phoneNumberId }}/messages",
+        "url": "=https://graph.facebook.com/v19.0/1052743247932102/messages",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            { "name": "messaging_product", "value": "whatsapp" },
-            { "name": "to", "value": "={{ $json.from }}" },
-            { "name": "type", "value": "text" },
-            {
-              "name": "text",
-              "value": "={ \"body\": \"{{ $json.replyText }}\" }"
-            }
-          ]
-        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.from }}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": {{ JSON.stringify($json.replyText) }} }\n}",
         "options": {}
       },
       "id": "wa-send-reply",
       "name": "Send WA Reply",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2000, 220],
+      "position": [2000, 140],
       "credentials": {
         "httpHeaderAuth": { "id": "meta-wa-token", "name": "Meta WA Bearer Token" }
       },
-      "notes": "Credentials: httpHeaderAuth\nName: Authorization\nValue: Bearer YOUR_WA_ACCESS_TOKEN"
+      "notes": "Credentials: Meta WA Bearer Token\nName: Authorization\nValue: Bearer EAAxxxxxx (token dari Meta Developer Console)"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://localhost:5678/webhook/incoming-conversation",
+        "url": "https://n8n.srv1696073.hstgr.cloud/webhook/incoming-conversation",
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            { "name": "conversationId", "value": "={{ $json.from }}" },
-            { "name": "clientName", "value": "={{ $json.clientName }}" },
-            { "name": "source", "value": "whatsapp" },
-            { "name": "lastMessage", "value": "={{ $json.text }}" },
-            { "name": "intent", "value": "={{ $json.intent }}" },
-            { "name": "needsHuman", "value": "={{ $json.needs_human }}" },
-            { "name": "mode", "value": "ai" },
-            { "name": "timestamp", "value": "={{ $now }}" }
-          ]
-        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"conversationId\": \"{{ $json.from }}\",\n  \"clientName\": \"{{ $json.clientName }}\",\n  \"source\": \"whatsapp\",\n  \"lastMessage\": {{ JSON.stringify($json.text) }},\n  \"intent\": \"{{ $json.intent }}\",\n  \"needsHuman\": {{ $json.needs_human }},\n  \"mode\": \"ai\",\n  \"phoneNumberId\": \"1052743247932102\",\n  \"timestamp\": \"{{ $now }}\"\n}",
         "options": {}
       },
       "id": "notify-dashboard",
       "name": "Notify Dashboard",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2000, 420],
-      "notes": "Ganti URL dengan domain dashboard Anda.\nEndpoint ini di-handle oleh React app."
+      "position": [2000, 340],
+      "notes": "Kirim data ke dashboard React via webhook endpoint"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://localhost:5678/webhook/wa-estimator",
+        "url": "https://n8n.srv1696073.hstgr.cloud/webhook/wa-estimator",
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            { "name": "from", "value": "={{ $json.from }}" },
-            { "name": "clientName", "value": "={{ $json.clientName }}" },
-            { "name": "phoneNumberId", "value": "={{ $json.phoneNumberId }}" },
-            { "name": "extracted", "value": "={{ JSON.stringify($json.extracted) }}" }
-          ]
-        },
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"from\": \"{{ $json.from }}\",\n  \"clientName\": {{ JSON.stringify($json.clientName) }},\n  \"phoneNumberId\": \"1052743247932102\",\n  \"extracted\": {{ JSON.stringify($json.extracted) }}\n}",
         "options": {}
       },
       "id": "trigger-estimator",
       "name": "Trigger Workflow 2 — Estimator",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2000, 620],
-      "notes": "Trigger workflow 2 dengan data extracted dari classifier"
+      "position": [2000, 540],
+      "notes": "Trigger Workflow 2 ketika data harga lengkap"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n.srv1696073.hstgr.cloud/webhook/wa-proposal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"from\": \"{{ $json.from }}\",\n  \"clientName\": {{ JSON.stringify($json.clientName) }},\n  \"phoneNumberId\": \"1052743247932102\",\n  \"extracted\": {{ JSON.stringify($json.extracted) }}\n}",
+        "options": {}
+      },
+      "id": "trigger-proposal",
+      "name": "Trigger Workflow 3 — Proposal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 720],
+      "notes": "Trigger Workflow 3 ketika client minta proposal"
     }
   ],
   "connections": {
     "Webhook — Meta WA Incoming": {
       "main": [
-        [
-          { "node": "Respond 200 to Meta", "type": "main", "index": 0 },
-          { "node": "Parse Meta Payload", "type": "main", "index": 0 }
-        ]
+        [{ "node": "Parse Meta Payload", "type": "main", "index": 0 }]
       ]
     },
     "Parse Meta Payload": {
@@ -340,11 +315,7 @@
       "main": [[{ "node": "Has Reply Text?", "type": "main", "index": 0 }]]
     },
     "Flag for Human Review": {
-      "main": [
-        [
-          { "node": "Notify Dashboard", "type": "main", "index": 0 }
-        ]
-      ]
+      "main": [[{ "node": "Notify Dashboard", "type": "main", "index": 0 }]]
     },
     "Has Reply Text?": {
       "main": [
@@ -353,15 +324,15 @@
           { "node": "Notify Dashboard", "type": "main", "index": 0 }
         ],
         [
-          { "node": "Trigger Workflow 2 — Estimator", "type": "main", "index": 0 }
+          { "node": "Trigger Workflow 2 — Estimator", "type": "main", "index": 0 },
+          { "node": "Trigger Workflow 3 — Proposal", "type": "main", "index": 0 }
         ]
       ]
     }
   },
   "settings": {
     "executionOrder": "v1",
-    "saveManualExecutions": true,
-    "errorWorkflow": ""
+    "saveManualExecutions": true
   },
   "tags": [{ "name": "sudut-ruang" }]
 }

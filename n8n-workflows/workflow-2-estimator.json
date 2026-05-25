@@ -5,7 +5,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "wa-estimator",
-        "responseMode": "responseNode",
+        "responseMode": "immediately",
         "options": {}
       },
       "id": "webhook-estimator",
@@ -13,23 +13,11 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [240, 300],
-      "notes": "Dipanggil oleh Workflow 1 ketika intent = ASK_PRICE dan data lengkap.\nPayload: { from, clientName, phoneNumberId, extracted: {building_type, tier, area_sqm, service_type} }"
+      "notes": "Dipanggil oleh Workflow 1 ketika intent = ASK_PRICE dan data lengkap.\nPayload: { from, clientName, phoneNumberId, extracted }"
     },
     {
       "parameters": {
-        "respondWith": "text",
-        "responseBody": "OK",
-        "options": {}
-      },
-      "id": "respond-ok",
-      "name": "Respond OK",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [460, 160]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Normalize data dari Workflow 1\nconst body = $input.first().json;\nlet extracted = body.extracted;\n\n// Kalau extracted dikirim sebagai string (JSON.stringify), parse dulu\nif (typeof extracted === 'string') {\n  try { extracted = JSON.parse(extracted); } catch(e) { extracted = {}; }\n}\n\n// Map building_type ke id spreadsheet\nconst typeMap = {\n  'rumah': { type: 'Rumah Tinggal', defaultTier: 'Standar' },\n  'cafe': { type: 'Cafe / Restoran', defaultTier: 'Standar' },\n  'restoran': { type: 'Cafe / Restoran', defaultTier: 'Standar' },\n  'kantor': { type: 'Kantor', defaultTier: 'Standar' },\n  'villa': { type: 'Villa / Guest House', defaultTier: 'Standar' },\n  'guest house': { type: 'Villa / Guest House', defaultTier: 'Standar' },\n  'ruko': { type: 'Ruko / Kios', defaultTier: 'Standar' },\n  'kios': { type: 'Ruko / Kios', defaultTier: 'Standar' },\n  'renovasi': { type: 'Renovasi (Parsial)', defaultTier: 'Sedang' },\n};\n\n// Map tier dari AI ke tier spreadsheet\nconst tierMap = {\n  'ekonomi': 'Ekonomi',\n  'standar': 'Standar',\n  'menengah': 'Menengah Atas',\n  'premium': 'Premium',\n  'mewah': 'Mewah/Premium',\n  'ringan': 'Ringan',\n  'sedang': 'Sedang',\n  'full gut': 'Full Gut',\n};\n\n// Map service_type ke kategori spreadsheet\nconst serviceMap = {\n  'arsitektur': 'Arsitektur',\n  'interior': 'Interior',\n  'komersial': 'Komersial',\n  'lansekap': 'Lansekap',\n  'pengawasan': 'Pengawasan',\n};\n\n// Auto-detect service dari building type kalau tidak disebutkan\nconst autoServiceMap = {\n  'cafe': 'Komersial',\n  'restoran': 'Komersial',\n  'renovasi': 'Interior',\n  'villa': 'Arsitektur',\n  'rumah': 'Arsitektur',\n  'kantor': 'Arsitektur',\n  'ruko': 'Arsitektur',\n};\n\nconst rawType = (extracted.building_type || '').toLowerCase();\nconst rawTier = (extracted.tier || '').toLowerCase();\nconst rawService = (extracted.service_type || '').toLowerCase();\n\nconst typeInfo = typeMap[rawType] || { type: 'Rumah Tinggal', defaultTier: 'Standar' };\nconst normalizedTier = tierMap[rawTier] || typeInfo.defaultTier;\nconst normalizedService = serviceMap[rawService] || autoServiceMap[rawType] || 'Arsitektur';\n\nreturn [{\n  json: {\n    from: body.from,\n    clientName: body.clientName || 'kak',\n    phoneNumberId: body.phoneNumberId,\n    buildingType: typeInfo.type,\n    tier: normalizedTier,\n    areaSqm: extracted.area_sqm || null,\n    serviceCategory: normalizedService,\n    rawExtracted: extracted\n  }\n}];"
+        "jsCode": "// Normalize data dari Workflow 1\nconst body = $input.first().json;\nlet extracted = body.extracted;\n\nif (typeof extracted === 'string') {\n  try { extracted = JSON.parse(extracted); } catch(e) { extracted = {}; }\n}\n\n// Map building_type ke nama di spreadsheet\nconst typeMap = {\n  'rumah': { type: 'Rumah Tinggal', defaultTier: 'Standar' },\n  'cafe': { type: 'Cafe / Restoran', defaultTier: 'Standar' },\n  'restoran': { type: 'Cafe / Restoran', defaultTier: 'Standar' },\n  'kantor': { type: 'Kantor', defaultTier: 'Standar' },\n  'villa': { type: 'Villa / Guest House', defaultTier: 'Standar' },\n  'guest house': { type: 'Villa / Guest House', defaultTier: 'Standar' },\n  'ruko': { type: 'Ruko / Kios', defaultTier: 'Standar' },\n  'kios': { type: 'Ruko / Kios', defaultTier: 'Standar' },\n  'renovasi': { type: 'Renovasi (Parsial)', defaultTier: 'Sedang' },\n};\n\nconst tierMap = {\n  'ekonomi': 'Ekonomi',\n  'standar': 'Standar',\n  'menengah': 'Menengah Atas',\n  'premium': 'Premium',\n  'mewah': 'Mewah/Premium',\n  'ringan': 'Ringan',\n  'sedang': 'Sedang',\n};\n\nconst serviceMap = {\n  'arsitektur': 'Arsitektur',\n  'interior': 'Interior',\n  'komersial': 'Komersial',\n  'lansekap': 'Lansekap',\n  'pengawasan': 'Pengawasan',\n};\n\nconst autoServiceMap = {\n  'cafe': 'Komersial',\n  'restoran': 'Komersial',\n  'renovasi': 'Interior',\n  'villa': 'Arsitektur',\n  'rumah': 'Arsitektur',\n  'kantor': 'Arsitektur',\n  'ruko': 'Arsitektur',\n};\n\nconst rawType = (extracted.building_type || '').toLowerCase();\nconst rawTier = (extracted.tier || '').toLowerCase();\nconst rawService = (extracted.service_type || '').toLowerCase();\n\nconst typeInfo = typeMap[rawType] || { type: 'Rumah Tinggal', defaultTier: 'Standar' };\nconst normalizedTier = tierMap[rawTier] || typeInfo.defaultTier;\nconst normalizedService = serviceMap[rawService] || autoServiceMap[rawType] || 'Arsitektur';\n\nreturn [{\n  json: {\n    from: body.from,\n    clientName: body.clientName || 'kak',\n    phoneNumberId: body.phoneNumberId || '1052743247932102',\n    buildingType: typeInfo.type,\n    tier: normalizedTier,\n    areaSqm: extracted.area_sqm || null,\n    serviceCategory: normalizedService,\n    rawExtracted: extracted\n  }\n}];"
       },
       "id": "normalize-data",
       "name": "Normalize Extracted Data",
@@ -46,26 +34,26 @@
           "mode": "id"
         },
         "sheetName": {
-          "value": "RAB Biaya Konstruksi",
+          "value": "RAB Bangun",
           "__rl": true,
           "mode": "name"
         },
         "options": {
-          "headerRow": 4
+          "headerRow": 5
         }
       },
       "id": "sheets-read-rab",
       "name": "Sheets — Read RAB Konstruksi",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [680, 200],
+      "position": [680, 160],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "google-sheets-cred",
           "name": "Google Sheets (Service Account)"
         }
       },
-      "notes": "Credentials: Google Sheets OAuth2 atau Service Account\nDocument ID sudah diisi dari spreadsheet Sudut Ruang.\nAdjust headerRow sesuai baris header aktual di sheet."
+      "notes": "Sheet: RAB Bangun\nHeader row: 5 (data mulai baris 5)\nDocument ID: 1ne4sn-sPBmMjNYfxgy50ac7lZiSD0bKSvqYTf7bSt0s"
     },
     {
       "parameters": {
@@ -94,11 +82,12 @@
           "id": "google-sheets-cred",
           "name": "Google Sheets (Service Account)"
         }
-      }
+      },
+      "notes": "Sheet: Fee Jasa Arsitek\nHeader row: 4"
     },
     {
       "parameters": {
-        "jsCode": "// Ambil data dari kedua sheet dan hitung estimasi\nconst inputData = $('Normalize Extracted Data').first().json;\nconst rabRows = $('Sheets — Read RAB Konstruksi').all().map(i => i.json);\nconst feeRows = $('Sheets — Read Fee Jasa').all().map(i => i.json);\n\nconst { buildingType, tier, areaSqm, serviceCategory } = inputData;\n\n// --- STEP 1: Cari baris RAB yang cocok ---\n// Coba exact match dulu\nlet rabRow = rabRows.find(r => {\n  const rowType = (r['Tipe Bangunan'] || r['tipe'] || Object.values(r)[0] || '').toString().trim();\n  const rowTier = (r['Kelas'] || r['kelas'] || Object.values(r)[1] || '').toString().trim();\n  return rowType.toLowerCase().includes(buildingType.toLowerCase().split('/')[0].trim().toLowerCase())\n    && rowTier.toLowerCase().includes(tier.toLowerCase().split('/')[0].trim().toLowerCase());\n});\n\n// Fallback: cari hanya berdasarkan tipe\nif (!rabRow) {\n  rabRow = rabRows.find(r => {\n    const rowType = (Object.values(r)[0] || '').toString().trim();\n    return rowType.toLowerCase().includes(buildingType.toLowerCase().split('/')[0].trim().toLowerCase());\n  });\n}\n\n// Ultimate fallback: pakai Rumah Tinggal Standar\nif (!rabRow) {\n  rabRow = rabRows[1] || rabRows[0];\n}\n\n// --- STEP 2: Extract harga RAB ---\n// Coba berbagai kemungkinan nama kolom\nconst rabMinRaw = rabRow['Harga Min/m²'] || rabRow['Min'] || rabRow['harga_min'] || Object.values(rabRow)[2] || 0;\nconst rabMaxRaw = rabRow['Harga Maks/m²'] || rabRow['Maks'] || rabRow['harga_max'] || Object.values(rabRow)[3] || 0;\n\n// Bersihkan nilai (hapus titik, koma, Rp)\nconst cleanNum = (val) => {\n  if (typeof val === 'number') return val;\n  return parseFloat(String(val).replace(/[^0-9.]/g, '')) || 0;\n};\n\nconst rabPriceMin = cleanNum(rabMinRaw);\nconst rabPriceMax = cleanNum(rabMaxRaw);\nconst area = areaSqm || 100; // default 100m2 kalau tidak disebutkan\n\nconst rabMin = rabPriceMin * area;\nconst rabMax = rabPriceMax * area;\nconst rabAvg = (rabMin + rabMax) / 2;\n\n// --- STEP 3: Cari baris Fee yang cocok ---\nlet feeRow = feeRows.find(r => {\n  const rowCat = (r['Kategori'] || r['Jenis Jasa'] || Object.values(r)[0] || '').toString();\n  return rowCat.toLowerCase().includes(serviceCategory.toLowerCase().split('/')[0].trim().toLowerCase())\n    || rowCat.toLowerCase().includes(serviceCategory.toLowerCase());\n});\n\nif (!feeRow) {\n  feeRow = feeRows[0]; // fallback ke baris pertama\n}\n\n// --- STEP 4: Hitung fee ---\nconst feePctRaw = feeRow['Fee (%)'] || feeRow['Persentase'] || feeRow['%'] || Object.values(feeRow)[2] || 7;\nconst feePctStr = String(feePctRaw);\n\n// Handle range \"7-10%\"\nlet feePctMin, feePctMax;\nif (feePctStr.includes('-')) {\n  const parts = feePctStr.replace('%','').split('-');\n  feePctMin = parseFloat(parts[0]) || 7;\n  feePctMax = parseFloat(parts[1]) || 10;\n} else {\n  feePctMin = feePctMax = parseFloat(feePctStr.replace('%','')) || 7;\n}\n\nconst feeMin = rabAvg * feePctMin / 100;\nconst feeMax = rabAvg * feePctMax / 100;\nconst feeAvg = (feeMin + feeMax) / 2;\n\nconst ppnRate = 0.11;\nconst ppn = feeAvg * ppnRate;\nconst totalFee = feeAvg + ppn;\n\n// --- STEP 5: Format angka ke Rupiah ---\nconst fmt = (n) => {\n  if (n >= 1_000_000_000) return `Rp ${(n/1_000_000_000).toFixed(1)} M`;\n  if (n >= 1_000_000) return `Rp ${Math.round(n/1_000_000)} jt`;\n  return `Rp ${n.toLocaleString('id-ID')}`;\n};\n\nconst serviceName = feeRow['Jenis Jasa'] || feeRow['Layanan'] || Object.values(feeRow)[0] || 'Jasa Desain';\nconst spec = rabRow['Spesifikasi'] || rabRow['Keterangan'] || Object.values(rabRow)[4] || '';\n\nreturn [{\n  json: {\n    ...inputData,\n    area,\n    result: {\n      buildingType,\n      tier,\n      areaSqm: area,\n      spec,\n      rabMin, rabMax, rabAvg,\n      rabMinFmt: fmt(rabMin), rabMaxFmt: fmt(rabMax), rabAvgFmt: fmt(rabAvg),\n      serviceName,\n      serviceCategory,\n      feePctMin, feePctMax,\n      feeMin, feeMax, feeAvg,\n      feeMinFmt: fmt(feeMin), feeMaxFmt: fmt(feeMax), feeAvgFmt: fmt(feeAvg),\n      ppn, ppnFmt: fmt(ppn),\n      totalFee, totalFeeFmt: fmt(totalFee),\n      areaAssumed: !areaSqm\n    }\n  }\n}];"
+        "jsCode": "// Ambil data dari kedua sheet dan hitung estimasi\nconst inputData = $('Normalize Extracted Data').first().json;\nconst rabRows = $('Sheets — Read RAB Konstruksi').all().map(function(i) { return i.json; });\nconst feeRows = $('Sheets — Read Fee Jasa').all().map(function(i) { return i.json; });\n\nconst buildingType = inputData.buildingType;\nconst tier = inputData.tier;\nconst areaSqm = inputData.areaSqm;\nconst serviceCategory = inputData.serviceCategory;\n\n// Debug: log kolom yang tersedia\nconsole.log('RAB columns:', Object.keys(rabRows[0] || {}));\nconsole.log('Fee columns:', Object.keys(feeRows[0] || {}));\nconsole.log('Looking for:', buildingType, tier);\n\n// --- Cari baris RAB ---\nvar rabRow = null;\nfor (var i = 0; i < rabRows.length; i++) {\n  var r = rabRows[i];\n  var vals = Object.values(r);\n  var rowType = String(vals[0] || '').toLowerCase().trim();\n  var rowTier = String(vals[1] || '').toLowerCase().trim();\n  var btLower = buildingType.toLowerCase().split('/')[0].trim();\n  var tierLower = tier.toLowerCase().split('/')[0].trim();\n  if (rowType.indexOf(btLower) !== -1 && rowTier.indexOf(tierLower) !== -1) {\n    rabRow = r;\n    break;\n  }\n}\n\n// Fallback: match tipe saja\nif (!rabRow) {\n  for (var j = 0; j < rabRows.length; j++) {\n    var r2 = rabRows[j];\n    var rowType2 = String(Object.values(r2)[0] || '').toLowerCase();\n    if (rowType2.indexOf(buildingType.toLowerCase().split('/')[0].trim()) !== -1) {\n      rabRow = r2;\n      break;\n    }\n  }\n}\n\nif (!rabRow) rabRow = rabRows[1] || rabRows[0] || {};\n\n// --- Extract harga RAB ---\nvar cleanNum = function(val) {\n  if (typeof val === 'number') return val;\n  return parseFloat(String(val).replace(/[^0-9.]/g, '')) || 0;\n};\n\nvar rabVals = Object.values(rabRow);\nvar rabPriceMin = cleanNum(rabVals[2] || 0);\nvar rabPriceMax = cleanNum(rabVals[3] || 0);\nvar area = areaSqm || 100;\n\nvar rabMin = rabPriceMin * area;\nvar rabMax = rabPriceMax * area;\nvar rabAvg = (rabMin + rabMax) / 2;\nvar spec = String(rabVals[4] || '');\n\n// --- Cari baris Fee ---\nvar feeRow = null;\nfor (var k = 0; k < feeRows.length; k++) {\n  var f = feeRows[k];\n  var fVals = Object.values(f);\n  var rowCat = String(fVals[0] || '').toLowerCase();\n  var catLower = serviceCategory.toLowerCase();\n  if (rowCat.indexOf(catLower) !== -1 || rowCat.indexOf(catLower.split('/')[0].trim()) !== -1) {\n    feeRow = f;\n    break;\n  }\n}\n\nif (!feeRow) feeRow = feeRows[0] || {};\n\n// --- Hitung fee ---\nvar feePctRaw = Object.values(feeRow)[2] || 7;\nvar feePctStr = String(feePctRaw).replace('%', '').trim();\n\nvar feePctMin, feePctMax;\nif (feePctStr.indexOf('-') !== -1) {\n  var parts = feePctStr.split('-');\n  feePctMin = parseFloat(parts[0]) || 7;\n  feePctMax = parseFloat(parts[1]) || 10;\n} else {\n  feePctMin = feePctMax = parseFloat(feePctStr) || 7;\n}\n\nvar feeMin = rabAvg * feePctMin / 100;\nvar feeMax = rabAvg * feePctMax / 100;\nvar feeAvg = (feeMin + feeMax) / 2;\n\nvar ppn = feeAvg * 0.11;\nvar totalFee = feeAvg + ppn;\n\n// --- Format ---\nvar fmt = function(n) {\n  if (n >= 1000000000) return 'Rp ' + (n/1000000000).toFixed(1) + ' M';\n  if (n >= 1000000) return 'Rp ' + Math.round(n/1000000) + ' jt';\n  return 'Rp ' + n.toLocaleString('id-ID');\n};\n\nvar serviceName = String(Object.values(feeRow)[0] || 'Jasa Desain');\n\nreturn [{\n  json: {\n    from: inputData.from,\n    clientName: inputData.clientName,\n    phoneNumberId: inputData.phoneNumberId,\n    area: area,\n    result: {\n      buildingType: buildingType,\n      tier: tier,\n      areaSqm: area,\n      spec: spec,\n      rabMin: rabMin, rabMax: rabMax, rabAvg: rabAvg,\n      rabMinFmt: fmt(rabMin), rabMaxFmt: fmt(rabMax), rabAvgFmt: fmt(rabAvg),\n      serviceName: serviceName,\n      serviceCategory: serviceCategory,\n      feePctMin: feePctMin, feePctMax: feePctMax,\n      feeMin: feeMin, feeMax: feeMax, feeAvg: feeAvg,\n      feeMinFmt: fmt(feeMin), feeMaxFmt: fmt(feeMax), feeAvgFmt: fmt(feeAvg),\n      ppn: ppn, ppnFmt: fmt(ppn),\n      totalFee: totalFee, totalFeeFmt: fmt(totalFee),\n      areaAssumed: !areaSqm\n    }\n  }\n}];"
       },
       "id": "calculate",
       "name": "Calculate RAB + Fee",
@@ -108,7 +97,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build pesan WA yang akan dikirim ke client\nconst { result, clientName } = $json;\nconst name = (clientName || 'kak').split(' ')[0];\nconst r = result;\n\n// Baris asumsi kalau luas tidak disebutkan\nconst areaNote = r.areaAssumed\n  ? `\\n(estimasi berdasarkan luas 100m2, sesuaikan kalau beda ya)`\n  : '';\n\n// Range fee atau single value\nconst feeRange = r.feePctMin !== r.feePctMax\n  ? `${r.feePctMin}-${r.feePctMax}%`\n  : `${r.feePctMin}%`;\n\nconst feeDisplay = r.feePctMin !== r.feePctMax\n  ? `${r.feeMinFmt} - ${r.feeMaxFmt}`\n  : r.feeAvgFmt;\n\nconst replyText =\n`Halo ${name}, ini estimasi kasarnya ya.\n\nProyek: ${r.buildingType} ${r.tier}\nLuas: ${r.areaSqm}m2${areaNote}\nSpesifikasi: ${r.spec || '-'}\n\nEstimasi RAB Konstruksi:\n${r.rabMinFmt} - ${r.rabMaxFmt}\n(rata-rata ${r.rabAvgFmt})\n\nFee Jasa Desain Sudut Ruang (${feeRange} dari RAB):\n${feeDisplay}\n\nPPN 11%: ${r.ppnFmt}\nTotal Fee Jasa: ${r.totalFeeFmt}\n\nIni masih estimasi awal ya, bisa berubah setelah survey dan diskusi detail.\n\nMau kita buatkan proposal lengkap dengan breakdown lebih rinci?`;\n\nreturn [{ json: { ...$json, replyText } }];"
+        "jsCode": "var result = $json.result;\nvar clientName = $json.clientName || 'kak';\nvar name = clientName.split(' ')[0];\nvar r = result;\n\nvar areaNote = r.areaAssumed ? '\\n(estimasi berdasarkan luas 100m2, sesuaikan kalau beda ya)' : '';\n\nvar feeRange = r.feePctMin !== r.feePctMax\n  ? r.feePctMin + '-' + r.feePctMax + '%'\n  : r.feePctMin + '%';\n\nvar feeDisplay = r.feePctMin !== r.feePctMax\n  ? r.feeMinFmt + ' - ' + r.feeMaxFmt\n  : r.feeAvgFmt;\n\nvar replyText = 'Halo ' + name + ', ini estimasi kasarnya ya.' +\n  '\\n\\nProyek: ' + r.buildingType + ' ' + r.tier +\n  '\\nLuas: ' + r.areaSqm + 'm2' + areaNote +\n  (r.spec ? '\\nSpesifikasi: ' + r.spec : '') +\n  '\\n\\nEstimasi RAB Konstruksi:' +\n  '\\n' + r.rabMinFmt + ' - ' + r.rabMaxFmt +\n  '\\n(rata-rata ' + r.rabAvgFmt + ')' +\n  '\\n\\nFee Jasa Desain Sudut Ruang (' + feeRange + ' dari RAB):' +\n  '\\n' + feeDisplay +\n  '\\n\\nPPN 11%: ' + r.ppnFmt +\n  '\\nTotal Fee Jasa: ' + r.totalFeeFmt +\n  '\\n\\nIni masih estimasi awal ya, bisa berubah setelah survey dan diskusi detail.' +\n  '\\n\\nMau kita buatkan proposal lengkap dengan breakdown lebih rinci?';\n\nreturn [{ json: { ...$json, replyText: replyText } }];"
       },
       "id": "build-reply",
       "name": "Build WA Reply Text",
@@ -119,19 +108,19 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://graph.facebook.com/v19.0/{{ $json.phoneNumberId }}/messages",
+        "url": "=https://graph.facebook.com/v19.0/1052743247932102/messages",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
-        "contentType": "json",
-        "body": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.from }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": {{ JSON.stringify($json.replyText) }}\n  }\n}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.from }}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": {{ JSON.stringify($json.replyText) }} }\n}",
         "options": {}
       },
       "id": "wa-send",
       "name": "Send WA — Estimasi",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, 200],
+      "position": [1340, 160],
       "credentials": {
         "httpHeaderAuth": { "id": "meta-wa-token", "name": "Meta WA Bearer Token" }
       }
@@ -155,8 +144,8 @@
             "phone": "={{ $json.from }}",
             "name": "={{ $json.clientName }}",
             "last_intent": "ASK_PRICE",
-            "building_type": "={{ $json.buildingType }}",
-            "tier": "={{ $json.tier }}",
+            "building_type": "={{ $json.result.buildingType }}",
+            "tier": "={{ $json.result.tier }}",
             "area_sqm": "={{ $json.area }}",
             "rab_avg": "={{ $json.result.rabAvg }}",
             "fee_avg": "={{ $json.result.feeAvg }}",
@@ -169,42 +158,38 @@
         "options": {}
       },
       "id": "sheets-log-client",
-      "name": "Sheets — Log / Update Client",
+      "name": "Sheets — Log Client",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1340, 400],
+      "position": [1340, 360],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "google-sheets-cred",
           "name": "Google Sheets (Service Account)"
         }
       },
-      "notes": "Sheet 'clients_database' harus dibuat dulu di spreadsheet.\nKolom: phone | name | last_intent | building_type | tier | area_sqm | rab_avg | fee_avg | status | last_contact | source"
+      "notes": "Buat sheet 'clients_database' di spreadsheet.\nKolom: phone | name | last_intent | building_type | tier | area_sqm | rab_avg | fee_avg | status | last_contact | source"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://localhost:3000/webhook/incoming-conversation",
+        "url": "https://n8n.srv1696073.hstgr.cloud/webhook/incoming-conversation",
         "sendBody": true,
-        "contentType": "json",
-        "body": "={\n  \"conversationId\": \"{{ $json.from }}\",\n  \"clientName\": \"{{ $json.clientName }}\",\n  \"source\": \"whatsapp\",\n  \"lastMessage\": \"{{ $json.replyText }}\",\n  \"mode\": \"ai\",\n  \"intent\": \"ASK_PRICE\",\n  \"metadata\": {\n    \"buildingType\": \"{{ $json.result.buildingType }}\",\n    \"tier\": \"{{ $json.result.tier }}\",\n    \"areaSqm\": {{ $json.result.areaSqm }},\n    \"estimatedValue\": \"{{ $json.result.totalFeeFmt }}\"\n  },\n  \"timestamp\": \"{{ $now }}\"\n}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"conversationId\": \"{{ $json.from }}\",\n  \"clientName\": {{ JSON.stringify($json.clientName) }},\n  \"source\": \"whatsapp\",\n  \"lastMessage\": {{ JSON.stringify($json.replyText) }},\n  \"mode\": \"ai\",\n  \"intent\": \"ASK_PRICE\",\n  \"metadata\": {\n    \"buildingType\": \"{{ $json.result.buildingType }}\",\n    \"tier\": \"{{ $json.result.tier }}\",\n    \"areaSqm\": {{ $json.result.areaSqm }},\n    \"estimatedValue\": \"{{ $json.result.totalFeeFmt }}\"\n  },\n  \"timestamp\": \"{{ $now }}\"\n}",
         "options": {}
       },
       "id": "notify-dashboard",
       "name": "Notify Dashboard",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, 600],
-      "notes": "Ganti localhost:3000 dengan URL dashboard Anda di VPS."
+      "position": [1340, 560]
     }
   ],
   "connections": {
     "Webhook — Trigger from WF1": {
       "main": [
-        [
-          { "node": "Respond OK", "type": "main", "index": 0 },
-          { "node": "Normalize Extracted Data", "type": "main", "index": 0 }
-        ]
+        [{ "node": "Normalize Extracted Data", "type": "main", "index": 0 }]
       ]
     },
     "Normalize Extracted Data": {
@@ -234,7 +219,7 @@
       "main": [
         [
           { "node": "Send WA — Estimasi", "type": "main", "index": 0 },
-          { "node": "Sheets — Log / Update Client", "type": "main", "index": 0 },
+          { "node": "Sheets — Log Client", "type": "main", "index": 0 },
           { "node": "Notify Dashboard", "type": "main", "index": 0 }
         ]
       ]
