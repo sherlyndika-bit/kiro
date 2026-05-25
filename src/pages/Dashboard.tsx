@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { supabase, DBConversation, DBDocument } from '../services/supabaseClient'
 
 interface Stats {
@@ -19,21 +19,28 @@ const Dashboard: React.FC = () => {
   const [recentDocuments, setRecentDocuments] = useState<DBDocument[]>([])
   const [loading, setLoading] = useState(true)
 
+  const channelRef = useRef<any>(null)
+
   useEffect(() => {
     loadData()
 
-    // Realtime subscription — unique name untuk hindari duplicate di StrictMode
-    const channel = supabase.channel(`dashboard-${Date.now()}`)
-    channel.on('postgres_changes' as any, { event: '*', schema: 'public', table: 'conversations' }, () => {
-      loadData()
-    })
-    channel.on('postgres_changes' as any, { event: 'INSERT', schema: 'public', table: 'documents' }, () => {
-      loadDocuments()
-    })
-    channel.subscribe()
+    if (!channelRef.current) {
+      const channel = supabase.channel('dashboard-live')
+      channel.on('postgres_changes' as any, { event: '*', schema: 'public', table: 'conversations' }, () => {
+        loadData()
+      })
+      channel.on('postgres_changes' as any, { event: 'INSERT', schema: 'public', table: 'documents' }, () => {
+        loadDocuments()
+      })
+      channel.subscribe()
+      channelRef.current = channel
+    }
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
     }
   }, [])
 

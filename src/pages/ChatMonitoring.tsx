@@ -21,17 +21,37 @@ const ChatMonitoring: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const selectedConv = conversations.find((c) => c.id === selectedId) || null
+  const convChannelRef = useRef<any>(null)
+  const msgChannelRef = useRef<any>(null)
 
   useEffect(() => {
     loadConversations()
     loadQuickReplies()
-    setupRealtimeConversations()
+
+    // Cek kalau channel belum dibuat
+    if (!convChannelRef.current) {
+      convChannelRef.current = setupRealtimeConversations()
+    }
+
+    return () => {
+      if (convChannelRef.current) {
+        supabase.removeChannel(convChannelRef.current)
+        convChannelRef.current = null
+      }
+    }
   }, [])
 
   useEffect(() => {
     if (selectedId) {
       loadMessages(selectedId)
-      setupRealtimeMessages(selectedId)
+
+      // Cleanup channel lama
+      if (msgChannelRef.current) {
+        supabase.removeChannel(msgChannelRef.current)
+        msgChannelRef.current = null
+      }
+
+      msgChannelRef.current = setupRealtimeMessages(selectedId)
       ConversationService.markRead(selectedId)
     }
   }, [selectedId])
@@ -58,8 +78,7 @@ const ChatMonitoring: React.FC = () => {
   }
 
   const setupRealtimeConversations = () => {
-    const channelName = `conv-monitor-${Date.now()}`
-    const channel = supabase.channel(channelName)
+    const channel = supabase.channel('conv-monitor')
     channel.on(
       'postgres_changes' as any,
       { event: '*', schema: 'public', table: 'conversations' },
@@ -74,12 +93,11 @@ const ChatMonitoring: React.FC = () => {
       }
     )
     channel.subscribe()
-    return () => { supabase.removeChannel(channel) }
+    return channel
   }
 
   const setupRealtimeMessages = (convId: string) => {
-    const channelName = `msg-${convId}-${Date.now()}`
-    const channel = supabase.channel(channelName)
+    const channel = supabase.channel(`msg-${convId}`)
     channel.on(
       'postgres_changes' as any,
       { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${convId}` },
@@ -88,7 +106,7 @@ const ChatMonitoring: React.FC = () => {
       }
     )
     channel.subscribe()
-    return () => { supabase.removeChannel(channel) }
+    return channel
   }
 
   const handleSendMessage = async () => {
