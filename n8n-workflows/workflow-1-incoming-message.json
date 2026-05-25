@@ -58,7 +58,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"temperature\": 0.1,\n  \"max_tokens\": 400,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Kamu adalah AI classifier untuk bisnis jasa desain arsitektur dan interior bernama Sudut Ruang. Tugasmu: Analisis pesan WhatsApp dari calon klien dan tentukan intent serta ekstrak data. Kembalikan HANYA JSON valid tanpa penjelasan apapun. Format response: {\\\"intent\\\": \\\"GREETING atau ASK_PRICE atau REQUEST_PROPOSAL atau FOLLOW_UP atau GENERAL_QUESTION atau OTHER\\\", \\\"confidence\\\": 0.9, \\\"extracted\\\": {\\\"building_type\\\": \\\"rumah atau cafe atau restoran atau kantor atau villa atau ruko atau renovasi atau null\\\", \\\"tier\\\": \\\"ekonomi atau standar atau menengah atau premium atau null\\\", \\\"area_sqm\\\": null, \\\"service_type\\\": \\\"arsitektur atau interior atau komersial atau lansekap atau pengawasan atau null\\\"}, \\\"needs_human\\\": false, \\\"reason\\\": \\\"alasan singkat\\\"}. Contoh: Halo -> GREETING. Berapa biaya desain cafe 80m2 -> ASK_PRICE building_type cafe area_sqm 80. Bisa dibuatkan proposal -> REQUEST_PROPOSAL. Kapan bisa survey -> GENERAL_QUESTION needs_human true.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.text) }}\n    }\n  ]\n}",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"temperature\": 0.1,\n  \"max_tokens\": 400,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Kamu adalah Syifa, AI assistant untuk bisnis jasa desain arsitektur dan interior bernama Sudut Ruang. Tugasmu: Analisis pesan WhatsApp dari calon klien dan tentukan intent serta ekstrak data. Kembalikan HANYA JSON valid tanpa penjelasan apapun. Format response: {\\\"intent\\\": \\\"GREETING atau ASK_PRICE atau REQUEST_PROPOSAL atau FOLLOW_UP atau GENERAL_QUESTION atau OTHER\\\", \\\"confidence\\\": 0.9, \\\"extracted\\\": {\\\"building_type\\\": \\\"rumah atau cafe atau restoran atau kantor atau villa atau ruko atau renovasi atau null\\\", \\\"tier\\\": \\\"ekonomi atau standar atau menengah atau premium atau null\\\", \\\"area_sqm\\\": null, \\\"service_type\\\": \\\"arsitektur atau interior atau komersial atau lansekap atau pengawasan atau null\\\"}, \\\"needs_human\\\": false, \\\"reason\\\": \\\"alasan singkat\\\"}. Contoh: Halo -> GREETING. Berapa biaya desain cafe 80m2 -> ASK_PRICE building_type cafe area_sqm 80. Bisa dibuatkan proposal -> REQUEST_PROPOSAL. Kapan bisa survey -> GENERAL_QUESTION needs_human true.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.text) }}\n    }\n  ]\n}",
         "options": {}
       },
       "id": "groq-classifier",
@@ -113,7 +113,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const name = ($json.clientName || 'kak').split(' ')[0];\nconst replies = [\n  'Halo ' + name + ', makasih udah hubungi Sudut Ruang!\\n\\nKita bantu desain arsitektur & interior buat rumah, cafe, kantor, villa, dan lainnya.\\n\\nCeritain dulu proyek yang lagi direncanain.',\n  'Hai ' + name + '! Selamat datang di Sudut Ruang.\\n\\nKita spesialis di jasa desain arsitektur & interior. Mau bangun atau renovasi apa nih?'\n];\nconst reply = replies[Math.floor(Math.random() * replies.length)];\nreturn [{ json: { ...$json, replyText: reply } }];"
+        "jsCode": "const name = ($json.clientName || 'kak').split(' ')[0];\nconst replies = [\n  'Halo ' + name + ', makasih udah hubungi Sudut Ruang! Saya Syifa, asisten AI-nya.\\n\\nKita bantu desain arsitektur & interior buat rumah, cafe, kantor, villa, dan lainnya.\\n\\nCeritain dulu proyek yang lagi direncanain.',\n  'Hai ' + name + '! Selamat datang di Sudut Ruang. Saya Syifa 😊\\n\\nKita spesialis di jasa desain arsitektur & interior. Mau bangun atau renovasi apa nih?'\n];\nconst reply = replies[Math.floor(Math.random() * replies.length)];\nreturn [{ json: { ...$json, replyText: reply } }];"
       },
       "id": "build-greeting",
       "name": "Build Greeting Reply",
@@ -154,8 +154,26 @@
     {
       "parameters": {
         "conditions": {
-          "conditions": [{ "leftValue": "={{ $json.replyText }}", "rightValue": "", "operator": { "type": "string", "operation": "isNotEmpty" } }]
-        }
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "reply-check",
+              "leftValue": "={{ $json.replyText }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
       "id": "if-has-reply",
       "name": "Has Reply Text?",
