@@ -24,6 +24,8 @@ const ChatMonitoring: React.FC = () => {
   // Polling interval refs
   const convPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const msgPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Track selectedId di ref supaya tidak stale di dalam interval callback
+  const selectedIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     loadConversations()
@@ -58,7 +60,11 @@ const ChatMonitoring: React.FC = () => {
   const loadConversations = async () => {
     const data = await ConversationService.getAll()
     setConversations(data)
-    if (data.length > 0 && !selectedId) setSelectedId(data[0].id)
+    // Hanya set selectedId kalau belum ada yang dipilih (pakai ref bukan state)
+    if (data.length > 0 && !selectedIdRef.current) {
+      setSelectedId(data[0].id)
+      selectedIdRef.current = data[0].id
+    }
     setLoading(false)
   }
 
@@ -176,7 +182,10 @@ const ChatMonitoring: React.FC = () => {
             filtered.map((conv) => (
               <div
                 key={conv.id}
-                onClick={() => setSelectedId(conv.id)}
+                onClick={() => {
+                  setSelectedId(conv.id)
+                  selectedIdRef.current = conv.id
+                }}
                 className={`p-md border-b border-outline-variant cursor-pointer hover:bg-surface-container-low transition-colors ${
                   selectedId === conv.id ? 'bg-surface-container border-l-4 border-l-primary' : ''
                 } ${conv.unread_count > 0 ? 'border-l-4 border-l-error' : ''}`}
