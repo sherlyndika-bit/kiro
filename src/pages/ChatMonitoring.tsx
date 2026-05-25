@@ -21,38 +21,33 @@ const ChatMonitoring: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const selectedConv = conversations.find((c) => c.id === selectedId) || null
-  const convChannelRef = useRef<any>(null)
-  const msgChannelRef = useRef<any>(null)
+  // Polling interval refs
+  const convPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const msgPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     loadConversations()
     loadQuickReplies()
 
-    // Cek kalau channel belum dibuat
-    if (!convChannelRef.current) {
-      convChannelRef.current = setupRealtimeConversations()
-    }
+    // Polling setiap 3 detik — tidak pakai realtime untuk hindari StrictMode error
+    convPollRef.current = setInterval(loadConversations, 3000)
 
     return () => {
-      if (convChannelRef.current) {
-        supabase.removeChannel(convChannelRef.current)
-        convChannelRef.current = null
-      }
+      if (convPollRef.current) clearInterval(convPollRef.current)
     }
   }, [])
 
   useEffect(() => {
     if (selectedId) {
       loadMessages(selectedId)
-
-      // Cleanup channel lama
-      if (msgChannelRef.current) {
-        supabase.removeChannel(msgChannelRef.current)
-        msgChannelRef.current = null
-      }
-
-      msgChannelRef.current = setupRealtimeMessages(selectedId)
       ConversationService.markRead(selectedId)
+
+      // Poll messages setiap 3 detik
+      if (msgPollRef.current) clearInterval(msgPollRef.current)
+      msgPollRef.current = setInterval(() => loadMessages(selectedId), 3000)
+    }
+    return () => {
+      if (msgPollRef.current) clearInterval(msgPollRef.current)
     }
   }, [selectedId])
 
@@ -77,37 +72,7 @@ const ChatMonitoring: React.FC = () => {
     setQuickReplies(data)
   }
 
-  const setupRealtimeConversations = () => {
-    const channel = supabase.channel('conv-monitor')
-    channel.on(
-      'postgres_changes' as any,
-      { event: '*', schema: 'public', table: 'conversations' },
-      (payload: any) => {
-        if (payload.eventType === 'INSERT') {
-          setConversations((prev) => [payload.new as DBConversation, ...prev])
-        } else if (payload.eventType === 'UPDATE') {
-          setConversations((prev) =>
-            prev.map((c) => (c.id === payload.new.id ? (payload.new as DBConversation) : c))
-          )
-        }
-      }
-    )
-    channel.subscribe()
-    return channel
-  }
-
-  const setupRealtimeMessages = (convId: string) => {
-    const channel = supabase.channel(`msg-${convId}`)
-    channel.on(
-      'postgres_changes' as any,
-      { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${convId}` },
-      (payload: any) => {
-        setMessages((prev) => [...prev, payload.new as DBMessage])
-      }
-    )
-    channel.subscribe()
-    return channel
-  }
+  // Polling-based, tidak pakai realtime Supabase untuk hindari StrictMode issues
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !selectedConv) return

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { supabase, DBConversation, DBDocument } from '../services/supabaseClient'
+import { DBConversation, DBDocument, supabase } from '../services/supabaseClient'
 
 interface Stats {
   activeChats: number
@@ -19,28 +19,16 @@ const Dashboard: React.FC = () => {
   const [recentDocuments, setRecentDocuments] = useState<DBDocument[]>([])
   const [loading, setLoading] = useState(true)
 
-  const channelRef = useRef<any>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     loadData()
 
-    if (!channelRef.current) {
-      const channel = supabase.channel('dashboard-live')
-      channel.on('postgres_changes' as any, { event: '*', schema: 'public', table: 'conversations' }, () => {
-        loadData()
-      })
-      channel.on('postgres_changes' as any, { event: 'INSERT', schema: 'public', table: 'documents' }, () => {
-        loadDocuments()
-      })
-      channel.subscribe()
-      channelRef.current = channel
-    }
+    // Polling setiap 5 detik — tidak pakai realtime untuk hindari StrictMode error
+    pollRef.current = setInterval(loadData, 5000)
 
     return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current)
-        channelRef.current = null
-      }
+      if (pollRef.current) clearInterval(pollRef.current)
     }
   }, [])
 
