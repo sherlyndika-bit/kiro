@@ -137,9 +137,9 @@ const ChatMonitoring: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 flex overflow-hidden" style={{ height: 'calc(100vh - 64px)' }}>
+    <div className="flex-1 flex" style={{ height: 'calc(100vh - 64px)', overflow: 'hidden' }}>
       {/* Column 1: Conversation List */}
-      <section className="w-80 border-r border-outline-variant bg-surface-container-lowest flex flex-col flex-shrink-0">
+      <section className="w-80 border-r border-outline-variant bg-surface-container-lowest flex flex-col flex-shrink-0 min-h-0">
         <div className="p-md border-b border-outline-variant">
           <div className="flex items-center justify-between mb-sm">
             <span className="font-label-caps text-label-caps text-outline uppercase">
@@ -231,7 +231,7 @@ const ChatMonitoring: React.FC = () => {
       </section>
 
       {/* Column 2: Chat Window */}
-      <section className="flex-1 flex flex-col bg-white min-w-0">
+      <section className="flex-1 flex flex-col bg-white min-w-0 min-h-0">
         {selectedConv ? (
           <>
             {/* Header */}
@@ -268,7 +268,7 @@ const ChatMonitoring: React.FC = () => {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 p-gutter overflow-y-auto flex flex-col gap-lg bg-background/30">
+            <div className="flex-1 p-gutter overflow-y-auto flex flex-col gap-lg bg-background/30 min-h-0">
               {messages.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center text-outline">
                   <div className="text-center">
@@ -377,7 +377,7 @@ const ChatMonitoring: React.FC = () => {
       </section>
 
       {/* Column 3: Control Panel */}
-      <section className="w-80 bg-background border-l border-outline-variant p-gutter flex flex-col gap-md overflow-y-auto flex-shrink-0">
+      <section className="w-80 bg-background border-l border-outline-variant p-gutter flex flex-col gap-md overflow-y-auto flex-shrink-0 min-h-0">
         {/* System Control */}
         <div className="glass-card border border-outline-variant rounded-xl p-md">
           <h4 className="font-label-caps text-label-caps text-outline uppercase mb-md">
