@@ -1,6 +1,95 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
+import { AIConfigService } from '../services/supabaseClient'
 
 const Settings: React.FC = () => {
+  const [config, setConfig] = useState<Record<string, string>>({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [testingConn, setTestingConn] = useState(false)
+  const [connStatus, setConnStatus] = useState<'idle' | 'ok' | 'fail'>('idle')
+
+  // Company profile state (dari ai_config)
+  const [companyName, setCompanyName] = useState('Sudut Ruang')
+  const [companyEmail, setCompanyEmail] = useState('hello@sudutruang.id')
+  const [companyPhone, setCompanyPhone] = useState('+62 812-3456-7890')
+  const [webhookUrl, setWebhookUrl] = useState('https://n8n.srv1696073.hstgr.cloud/webhook')
+
+  // AI toggles state
+  const [aiToggles, setAiToggles] = useState({
+    auto_reply_enabled: true,
+    smart_estimator: true,
+    content_generator: true,
+    confidence_alerts: true,
+  })
+
+  useEffect(() => {
+    loadConfig()
+  }, [])
+
+  const loadConfig = async () => {
+    const cfg = await AIConfigService.getAll()
+    setConfig(cfg)
+
+    if (cfg.company_name) setCompanyName(cfg.company_name)
+    if (cfg.company_email) setCompanyEmail(cfg.company_email)
+    if (cfg.company_phone) setCompanyPhone(cfg.company_phone)
+    if (cfg.webhook_url) setWebhookUrl(cfg.webhook_url)
+
+    setAiToggles({
+      auto_reply_enabled: cfg.auto_reply_enabled !== 'false',
+      smart_estimator: cfg.smart_estimator !== 'false',
+      content_generator: cfg.content_generator !== 'false',
+      confidence_alerts: cfg.confidence_alerts !== 'false',
+    })
+
+    setLoading(false)
+  }
+
+  const saveProfile = async () => {
+    setSaving(true)
+    await Promise.all([
+      AIConfigService.set('company_name', companyName),
+      AIConfigService.set('company_email', companyEmail),
+      AIConfigService.set('company_phone', companyPhone),
+      AIConfigService.set('webhook_url', webhookUrl),
+    ])
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const toggleAI = async (key: keyof typeof aiToggles) => {
+    const newVal = !aiToggles[key]
+    setAiToggles((prev) => ({ ...prev, [key]: newVal }))
+    await AIConfigService.set(key, String(newVal))
+  }
+
+  const testConnection = async () => {
+    setTestingConn(true)
+    setConnStatus('idle')
+    try {
+      const res = await fetch(`${webhookUrl}/ping`, { method: 'GET', signal: AbortSignal.timeout(5000) })
+      setConnStatus(res.ok ? 'ok' : 'fail')
+    } catch {
+      // coba endpoint lain
+      try {
+        const res2 = await fetch(webhookUrl, { method: 'GET', signal: AbortSignal.timeout(5000) })
+        setConnStatus(res2.status < 500 ? 'ok' : 'fail')
+      } catch {
+        setConnStatus('fail')
+      }
+    }
+    setTestingConn(false)
+  }
+
+  const aiToggleItems = [
+    { key: 'auto_reply_enabled' as const, name: 'Auto Follow-Up', desc: 'Kirim pesan otomatis ke lead baru' },
+    { key: 'smart_estimator' as const, name: 'Smart Estimator', desc: 'Kalkulasi biaya dengan AI' },
+    { key: 'content_generator' as const, name: 'Content Generator', desc: 'Generate konten marketing otomatis' },
+    { key: 'confidence_alerts' as const, name: 'Confidence Alerts', desc: 'Alert ketika AI butuh bantuan human' },
+  ]
+
   const integrations = [
     { icon: 'chat', name: 'WhatsApp Business', status: 'Connected', active: true },
     { icon: 'photo_camera', name: 'Instagram', status: 'Connected', active: true },
@@ -8,15 +97,8 @@ const Settings: React.FC = () => {
     { icon: 'account_tree', name: 'n8n Workflow', status: 'Active', active: true },
   ]
 
-  const aiToggles = [
-    { name: 'Auto Follow-Up', desc: 'Kirim pesan otomatis ke lead baru', enabled: true },
-    { name: 'Smart Estimator', desc: 'Kalkulasi biaya dengan AI', enabled: true },
-    { name: 'Content Generator', desc: 'Generate konten marketing otomatis', enabled: true },
-    { name: 'Confidence Alerts', desc: 'Alert ketika AI butuh bantuan human', enabled: true },
-  ]
-
   return (
-    <div className="p-gutter max-w-container-max space-y-md">
+    <div className="p-gutter space-y-md">
       <div>
         <h1 className="font-display-lg text-display-lg font-bold text-on-background">Settings</h1>
         <p className="text-body-md text-on-surface-variant">
@@ -28,53 +110,89 @@ const Settings: React.FC = () => {
         {/* Company Profile */}
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
           <h3 className="font-headline-sm text-headline-sm font-bold mb-md">Profil Perusahaan</h3>
-          <div className="space-y-md">
-            {[
-              { label: 'Nama Perusahaan', value: 'Sudut Ruang' },
-              { label: 'Email', value: 'hello@sudutruang.id' },
-              { label: 'Telepon', value: '+62 812-3456-7890' },
-            ].map((f) => (
-              <div key={f.label}>
-                <label className="text-label-caps text-outline uppercase block mb-2">
-                  {f.label}
-                </label>
+          {loading ? (
+            <div className="space-y-sm">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-12 bg-surface-container rounded-lg animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-md">
+              <div>
+                <label className="text-label-caps text-outline uppercase block mb-2">Nama Perusahaan</label>
                 <input
                   type="text"
-                  defaultValue={f.value}
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
                   className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md focus:ring-2 focus:ring-secondary outline-none"
                 />
               </div>
-            ))}
-            <button className="w-full py-3 bg-primary text-on-primary rounded-lg font-headline-sm text-[14px] font-bold uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all">
-              Simpan Perubahan
-            </button>
-          </div>
+              <div>
+                <label className="text-label-caps text-outline uppercase block mb-2">Email</label>
+                <input
+                  type="email"
+                  value={companyEmail}
+                  onChange={(e) => setCompanyEmail(e.target.value)}
+                  className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md focus:ring-2 focus:ring-secondary outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-label-caps text-outline uppercase block mb-2">Telepon</label>
+                <input
+                  type="text"
+                  value={companyPhone}
+                  onChange={(e) => setCompanyPhone(e.target.value)}
+                  className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md focus:ring-2 focus:ring-secondary outline-none"
+                />
+              </div>
+              <button
+                onClick={saveProfile}
+                disabled={saving}
+                className="w-full py-3 bg-primary text-on-primary rounded-lg font-headline-sm text-[14px] font-bold uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-sm"
+              >
+                {saving ? (
+                  <>
+                    <span className="material-symbols-outlined text-[18px] animate-spin">refresh</span>
+                    Menyimpan...
+                  </>
+                ) : saved ? (
+                  <>
+                    <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                    Tersimpan!
+                  </>
+                ) : (
+                  'Simpan Perubahan'
+                )}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* AI Configuration */}
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
-          <h3 className="font-headline-sm text-headline-sm font-bold mb-md">Konfigurasi AI</h3>
+          <h3 className="font-headline-sm text-headline-sm font-bold mb-md">Konfigurasi AI — Syifa</h3>
           <div className="space-y-sm">
-            {aiToggles.map((t, i) => (
+            {aiToggleItems.map((t) => (
               <div
-                key={i}
+                key={t.key}
                 className="flex items-center justify-between p-sm bg-surface rounded-lg border border-outline-variant"
               >
                 <div className="flex-1">
                   <p className="text-body-md font-bold">{t.name}</p>
                   <p className="text-label-caps text-outline">{t.desc}</p>
                 </div>
-                <div
-                  className={`w-12 h-6 rounded-full relative cursor-pointer shadow-inner ${
-                    t.enabled ? 'bg-emerald-500' : 'bg-outline'
+                <button
+                  onClick={() => toggleAI(t.key)}
+                  className={`w-12 h-6 rounded-full relative cursor-pointer shadow-inner transition-colors ${
+                    aiToggles[t.key] ? 'bg-emerald-500' : 'bg-outline'
                   }`}
                 >
                   <div
-                    className={`absolute top-1 bg-white w-4 h-4 rounded-full ${
-                      t.enabled ? 'right-1' : 'left-1'
+                    className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-all ${
+                      aiToggles[t.key] ? 'right-1' : 'left-1'
                     }`}
-                  ></div>
-                </div>
+                  />
+                </button>
               </div>
             ))}
           </div>
@@ -97,11 +215,7 @@ const Settings: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-body-md font-bold">{int.name}</p>
-                    <p
-                      className={`text-label-caps ${
-                        int.active ? 'text-emerald-600' : 'text-outline'
-                      }`}
-                    >
+                    <p className={`text-label-caps ${int.active ? 'text-emerald-600' : 'text-outline'}`}>
                       {int.status}
                     </p>
                   </div>
@@ -124,20 +238,55 @@ const Settings: React.FC = () => {
               </label>
               <input
                 type="text"
-                defaultValue="https://n8n.workflow.ai/v1/hooks/sudutruang"
+                value={webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
                 className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg font-mono-label text-mono-label focus:ring-2 focus:ring-secondary outline-none"
               />
             </div>
-            <div className="p-sm bg-surface-container rounded-lg flex items-start gap-sm">
-              <span className="material-symbols-outlined text-secondary text-[18px]">info</span>
+
+            {/* AI Model Config */}
+            <div>
+              <label className="text-label-caps text-outline uppercase block mb-2">
+                AI Model (Groq)
+              </label>
+              <input
+                type="text"
+                defaultValue={config.groq_model || 'llama-3.3-70b-versatile'}
+                onBlur={(e) => AIConfigService.set('groq_model', e.target.value)}
+                className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg font-mono-label text-mono-label focus:ring-2 focus:ring-secondary outline-none"
+              />
+            </div>
+
+            <div className={`p-sm rounded-lg flex items-start gap-sm ${
+              connStatus === 'ok'
+                ? 'bg-emerald-50 border border-emerald-200'
+                : connStatus === 'fail'
+                ? 'bg-error-container border border-error'
+                : 'bg-surface-container'
+            }`}>
+              <span className={`material-symbols-outlined text-[18px] ${
+                connStatus === 'ok' ? 'text-emerald-600' : connStatus === 'fail' ? 'text-error' : 'text-secondary'
+              }`}>
+                {connStatus === 'ok' ? 'check_circle' : connStatus === 'fail' ? 'error' : 'info'}
+              </span>
               <p className="text-body-md text-on-surface-variant">
-                URL ini digunakan untuk komunikasi 2 arah antara dashboard dan workflow n8n Anda.
-                Pastikan endpoint dapat diakses dari internet.
+                {connStatus === 'ok'
+                  ? 'Koneksi n8n berhasil!'
+                  : connStatus === 'fail'
+                  ? 'Koneksi gagal. Pastikan n8n aktif dan URL benar.'
+                  : 'URL ini digunakan untuk komunikasi 2 arah antara dashboard dan workflow n8n Syifa.'}
               </p>
             </div>
-            <button className="w-full py-3 border border-outline-variant rounded-lg text-body-md font-bold hover:bg-surface-container transition-colors flex items-center justify-center gap-sm">
-              <span className="material-symbols-outlined text-[18px]">sync</span>
-              Test Connection
+
+            <button
+              onClick={testConnection}
+              disabled={testingConn}
+              className="w-full py-3 border border-outline-variant rounded-lg text-body-md font-bold hover:bg-surface-container transition-colors flex items-center justify-center gap-sm disabled:opacity-50"
+            >
+              <span className={`material-symbols-outlined text-[18px] ${testingConn ? 'animate-spin' : ''}`}>
+                sync
+              </span>
+              {testingConn ? 'Testing...' : 'Test Connection'}
             </button>
           </div>
         </div>

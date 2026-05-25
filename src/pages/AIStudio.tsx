@@ -3,8 +3,10 @@ import {
   TemplateService,
   QuickReplyService,
   AIConfigService,
+  DocumentService,
   DBTemplate,
   DBQuickReply,
+  DBDocument,
 } from '../services/supabaseClient'
 
 type Tab = 'templates' | 'quick-replies' | 'config' | 'documents'
@@ -14,6 +16,8 @@ const AIStudio: React.FC = () => {
   const [templates, setTemplates] = useState<DBTemplate[]>([])
   const [quickReplies, setQuickReplies] = useState<DBQuickReply[]>([])
   const [aiConfig, setAiConfig] = useState<Record<string, string>>({})
+  const [documents, setDocuments] = useState<DBDocument[]>([])
+  const [loadingDocs, setLoadingDocs] = useState(false)
   const [loading, setLoading] = useState(true)
 
   // Template form
@@ -39,6 +43,19 @@ const AIStudio: React.FC = () => {
     setAiConfig(cfg)
     setLoading(false)
   }
+
+  const loadDocuments = async () => {
+    setLoadingDocs(true)
+    const docs = await DocumentService.getAll()
+    setDocuments(docs)
+    setLoadingDocs(false)
+  }
+
+  useEffect(() => {
+    if (activeTab === 'documents') {
+      loadDocuments()
+    }
+  }, [activeTab])
 
   const saveTemplate = async () => {
     if (!editingTemplate?.type || !editingTemplate?.name || !editingTemplate?.content) return
@@ -379,18 +396,100 @@ const AIStudio: React.FC = () => {
           {/* DOCUMENTS */}
           {activeTab === 'documents' && (
             <div className="space-y-md">
-              <p className="text-body-md text-on-surface-variant">
-                Semua dokumen yang telah di-generate (proposal, invoice, RAB)
-              </p>
-              <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
-                <div className="text-center py-xl text-outline">
-                  <span className="material-symbols-outlined text-5xl">folder_open</span>
-                  <p className="text-body-md mt-2">Documents akan muncul di sini</p>
-                  <p className="text-label-caps mt-1">
-                    Setelah WA terhubung dan client minta proposal, dokumen akan tersimpan otomatis
-                  </p>
-                </div>
+              <div className="flex items-center justify-between">
+                <p className="text-body-md text-on-surface-variant">
+                  Semua dokumen yang telah di-generate (proposal, invoice, RAB)
+                </p>
+                <button
+                  onClick={loadDocuments}
+                  className="flex items-center gap-xs py-2 px-md border border-outline-variant rounded-lg font-bold hover:bg-surface-container transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[18px]">refresh</span>
+                  Refresh
+                </button>
               </div>
+
+              {loadingDocs ? (
+                <div className="space-y-sm">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-16 bg-surface-container rounded-xl animate-pulse" />
+                  ))}
+                </div>
+              ) : documents.length === 0 ? (
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+                  <div className="text-center py-xl text-outline">
+                    <span className="material-symbols-outlined text-5xl">folder_open</span>
+                    <p className="text-body-md mt-2">Belum ada dokumen</p>
+                    <p className="text-label-caps mt-1">
+                      Setelah WA terhubung dan client minta proposal, dokumen akan tersimpan otomatis
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-sm">
+                  {documents.map((doc) => {
+                    const typeIcon: Record<string, string> = {
+                      proposal: 'description',
+                      invoice: 'receipt',
+                      rab: 'calculate',
+                      followup: 'forward_to_inbox',
+                    }
+                    const statusColor: Record<string, string> = {
+                      draft: 'bg-surface-container text-outline',
+                      sent: 'bg-secondary-container text-on-secondary-container',
+                      viewed: 'bg-blue-100 text-blue-700',
+                      accepted: 'bg-emerald-100 text-emerald-700',
+                      rejected: 'bg-error-container text-on-error-container',
+                    }
+                    return (
+                      <div
+                        key={doc.id}
+                        className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex items-center gap-md"
+                      >
+                        <div className="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center flex-shrink-0">
+                          <span className="material-symbols-outlined text-primary">
+                            {typeIcon[doc.type] || 'description'}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-sm">
+                            <span className="font-bold text-on-background capitalize">{doc.type}</span>
+                            {doc.proposal_no && (
+                              <span className="text-label-caps text-outline">#{doc.proposal_no}</span>
+                            )}
+                          </div>
+                          <p className="text-body-md text-on-surface-variant truncate">
+                            {doc.client_name || doc.client_phone || '—'}
+                          </p>
+                          <p className="text-label-caps text-outline">
+                            {new Date(doc.created_at).toLocaleString('id-ID', {
+                              day: 'numeric', month: 'short', year: 'numeric',
+                              hour: '2-digit', minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-sm flex-shrink-0">
+                          <span className={`px-2 py-0.5 rounded-full text-label-caps font-bold text-[10px] uppercase ${
+                            statusColor[doc.status] || 'bg-surface-container text-outline'
+                          }`}>
+                            {doc.status}
+                          </span>
+                          {doc.file_url && (
+                            <a
+                              href={doc.file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 hover:bg-surface-container rounded-lg transition-colors"
+                            >
+                              <span className="material-symbols-outlined text-[18px] text-primary">download</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </>

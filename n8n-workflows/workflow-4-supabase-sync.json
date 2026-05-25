@@ -1,5 +1,5 @@
 {
-  "name": "Sudut Ruang — 4. Supabase Sync",
+  "name": "Sudut Ruang — 4. Supabase Sync Hub",
   "nodes": [
     {
       "parameters": {
@@ -13,11 +13,11 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [240, 300],
-      "notes": "Semua workflow kirim data ke sini untuk disimpan ke Supabase.\nPayload: { conversationId, clientName, source, lastMessage, intent, mode, metadata, timestamp }"
+      "notes": "Semua workflow kirim data ke sini untuk disimpan ke Supabase.\nPayload: { conversationId, clientName, source, lastMessage, intent, mode, needsHuman, metadata, timestamp }"
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json;\n\n// Upsert conversation\nconst convData = {\n  id: body.conversationId || body.from,\n  client_name: body.clientName || 'Pelanggan',\n  source: body.source || 'whatsapp',\n  mode: body.mode || 'ai',\n  status: 'active',\n  last_message: body.lastMessage || '',\n  last_message_at: body.timestamp || new Date().toISOString(),\n  unread_count: body.mode === 'ai' ? 1 : 0,\n  metadata: body.metadata || {}\n};\n\n// Message data kalau ada pesan\nconst msgData = body.lastMessage ? {\n  conversation_id: body.conversationId || body.from,\n  content: body.lastMessage,\n  role: body.intent === 'incoming' ? 'client' : 'ai',\n  source: body.source || 'whatsapp',\n  ai_confidence: body.aiConfidence || null,\n  needs_human_review: body.needsHuman || false,\n  metadata: {}\n} : null;\n\nreturn [{ json: { convData, msgData, original: body } }];"
+        "jsCode": "const body = $input.first().json;\n\n// Upsert conversation\nconst convData = {\n  id: body.conversationId || body.from,\n  client_name: body.clientName || 'Pelanggan',\n  source: body.source || 'whatsapp',\n  mode: body.mode || 'ai',\n  status: 'active',\n  last_message: body.lastMessage || '',\n  last_message_at: body.timestamp || new Date().toISOString(),\n  unread_count: (body.mode === 'ai' || body.needsHuman) ? 1 : 0,\n  metadata: body.metadata || {}\n};\n\n// Message data\nconst msgData = body.lastMessage ? {\n  conversation_id: body.conversationId || body.from,\n  content: body.lastMessage,\n  role: body.intent === 'incoming' ? 'client' : 'ai',\n  source: body.source || 'whatsapp',\n  ai_confidence: body.aiConfidence || null,\n  needs_human_review: body.needsHuman || false,\n  metadata: { intent: body.intent || null }\n} : null;\n\nreturn [{ json: { convData, msgData, original: body } }];"
       },
       "id": "prepare-data",
       "name": "Prepare Supabase Data",
@@ -47,7 +47,7 @@
       "name": "Supabase — Upsert Conversation",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 200],
+      "position": [680, 160],
       "credentials": {
         "httpHeaderAuth": { "id": "supabase-cred", "name": "Supabase Authorization" }
       },
@@ -56,14 +56,26 @@
     {
       "parameters": {
         "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
           "conditions": [
             {
+              "id": "msg-check",
               "leftValue": "={{ $json.msgData }}",
               "rightValue": "",
-              "operator": { "type": "string", "operation": "isNotEmpty" }
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
       "id": "if-has-message",
       "name": "Has Message?",
@@ -120,7 +132,7 @@
       "name": "Supabase — Upsert Client",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 200],
+      "position": [900, 160],
       "credentials": {
         "httpHeaderAuth": { "id": "supabase-cred", "name": "Supabase Authorization" }
       }
