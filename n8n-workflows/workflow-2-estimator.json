@@ -1,5 +1,5 @@
 {
-  "name": "Sudut Ruang — 2. Auto Estimator",
+  "name": "Sudut Ruang — 2. Auto Estimator (Syifa)",
   "nodes": [
     {
       "parameters": {
@@ -13,69 +13,27 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [240, 300],
-      "notes": "Dipanggil oleh WF1 ketika intent = ASK_PRICE dan data lengkap."
+      "notes": "Dipanggil oleh WF1 ketika intent = ASK_PRICE dan data lengkap.\nPayload: { from, clientName, phoneNumberId, extracted }"
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json;\nlet extracted = body.extracted;\nif (typeof extracted === 'string') {\n  try { extracted = JSON.parse(extracted); } catch(e) { extracted = {}; }\n}\n\nconst typeMap = {\n  'rumah': { type: 'Rumah Tinggal', defaultTier: 'Standar' },\n  'cafe': { type: 'Cafe / Restoran', defaultTier: 'Standar' },\n  'restoran': { type: 'Cafe / Restoran', defaultTier: 'Standar' },\n  'kantor': { type: 'Kantor', defaultTier: 'Standar' },\n  'villa': { type: 'Villa / Guest House', defaultTier: 'Standar' },\n  'ruko': { type: 'Ruko / Kios', defaultTier: 'Standar' },\n  'renovasi': { type: 'Renovasi (Parsial)', defaultTier: 'Sedang' }\n};\n\nconst tierMap = {\n  'ekonomi': 'Ekonomi', 'standar': 'Standar', 'menengah': 'Menengah Atas',\n  'premium': 'Premium', 'mewah': 'Mewah/Premium', 'ringan': 'Ringan', 'sedang': 'Sedang'\n};\n\nconst serviceMap = {\n  'arsitektur': 'Arsitektur', 'interior': 'Interior', 'komersial': 'Komersial',\n  'lansekap': 'Lansekap', 'pengawasan': 'Pengawasan'\n};\n\nconst autoServiceMap = {\n  'cafe': 'Komersial', 'restoran': 'Komersial', 'renovasi': 'Interior',\n  'villa': 'Arsitektur', 'rumah': 'Arsitektur', 'kantor': 'Arsitektur', 'ruko': 'Arsitektur'\n};\n\nconst rawType = (extracted.building_type || '').toLowerCase();\nconst rawTier = (extracted.tier || '').toLowerCase();\nconst rawService = (extracted.service_type || '').toLowerCase();\n\nconst typeInfo = typeMap[rawType] || { type: 'Rumah Tinggal', defaultTier: 'Standar' };\nconst normalizedTier = tierMap[rawTier] || typeInfo.defaultTier;\nconst normalizedService = serviceMap[rawService] || autoServiceMap[rawType] || 'Arsitektur';\n\nreturn [{\n  json: {\n    from: body.from,\n    clientName: body.clientName || 'kak',\n    phoneNumberId: body.phoneNumberId || '1052743247932102',\n    buildingType: typeInfo.type,\n    tier: normalizedTier,\n    areaSqm: extracted.area_sqm || null,\n    serviceCategory: normalizedService\n  }\n}];"
+        "jsCode": "const body = $input.first().json;\nlet extracted = body.extracted;\nif (typeof extracted === 'string') {\n  try { extracted = JSON.parse(extracted); } catch(e) { extracted = {}; }\n}\n\n// Harga per m2 berdasarkan tipe & tier (dalam Rupiah)\nconst priceTable = {\n  'rumah': { 'ekonomi': [3500000,4500000], 'standar': [5000000,6000000], 'menengah': [6500000,8000000], 'premium': [9000000,12000000] },\n  'cafe': { 'standar': [5500000,7000000], 'menengah': [7500000,9500000], 'premium': [10000000,14000000] },\n  'restoran': { 'standar': [5500000,7000000], 'menengah': [7500000,9500000], 'premium': [10000000,14000000] },\n  'kantor': { 'standar': [4500000,6000000], 'menengah': [6500000,8500000], 'premium': [9000000,12000000] },\n  'villa': { 'standar': [6000000,8000000], 'menengah': [8500000,11000000], 'premium': [12000000,16000000] },\n  'ruko': { 'standar': [4000000,5500000], 'menengah': [6000000,7500000] },\n  'renovasi': { 'ringan': [1500000,2500000], 'sedang': [2500000,4000000], 'berat': [4000000,6000000] }\n};\n\n// Fee percentage berdasarkan kategori\nconst feePctTable = {\n  'arsitektur': [5, 8], 'interior': [7, 10], 'komersial': [6, 9],\n  'lansekap': [5, 7], 'pengawasan': [3, 5]\n};\n\n// Auto-map service berdasarkan building type\nconst autoService = {\n  'cafe': 'komersial', 'restoran': 'komersial', 'villa': 'arsitektur',\n  'rumah': 'arsitektur', 'kantor': 'arsitektur', 'ruko': 'arsitektur', 'renovasi': 'interior'\n};\n\nconst rawType = (extracted.building_type || 'rumah').toLowerCase();\nconst rawTier = (extracted.tier || 'standar').toLowerCase();\nconst rawService = (extracted.service_type || '').toLowerCase();\nconst area = extracted.area_sqm || 100;\nconst areaAssumed = !extracted.area_sqm;\n\n// Cari harga\nconst typeKey = Object.keys(priceTable).find(k => rawType.includes(k)) || 'rumah';\nconst tierKey = Object.keys(priceTable[typeKey] || {}).find(k => rawTier.includes(k)) || 'standar';\nconst prices = (priceTable[typeKey] && priceTable[typeKey][tierKey]) || [5000000, 6000000];\n\nconst rabMin = prices[0] * area;\nconst rabMax = prices[1] * area;\nconst rabAvg = (rabMin + rabMax) / 2;\n\n// Fee\nconst serviceKey = rawService || autoService[typeKey] || 'arsitektur';\nconst feePcts = feePctTable[serviceKey] || [5, 8];\nconst feeMin = rabAvg * feePcts[0] / 100;\nconst feeMax = rabAvg * feePcts[1] / 100;\nconst feeAvg = (feeMin + feeMax) / 2;\nconst ppn = feeAvg * 0.11;\nconst totalFee = feeAvg + ppn;\n\nconst fmt = (n) => {\n  if (n >= 1000000000) return 'Rp ' + (n/1000000000).toFixed(1) + ' M';\n  if (n >= 1000000) return 'Rp ' + Math.round(n/1000000) + ' jt';\n  return 'Rp ' + n.toLocaleString('id-ID');\n};\n\nreturn [{\n  json: {\n    from: body.from,\n    clientName: body.clientName || 'Pelanggan',\n    phoneNumberId: body.phoneNumberId || '1052743247932102',\n    area, areaAssumed,\n    buildingType: typeKey,\n    tier: tierKey,\n    serviceCategory: serviceKey,\n    rabMin, rabMax, rabAvg,\n    rabMinFmt: fmt(rabMin), rabMaxFmt: fmt(rabMax), rabAvgFmt: fmt(rabAvg),\n    feePctMin: feePcts[0], feePctMax: feePcts[1],\n    feeMin, feeMax, feeAvg,\n    feeMinFmt: fmt(feeMin), feeMaxFmt: fmt(feeMax), feeAvgFmt: fmt(feeAvg),\n    ppn, ppnFmt: fmt(ppn),\n    totalFee, totalFeeFmt: fmt(totalFee)\n  }\n}];"
       },
-      "id": "normalize-data",
-      "name": "Normalize Extracted Data",
+      "id": "calculate",
+      "name": "Calculate RAB + Fee",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [460, 300]
     },
     {
       "parameters": {
-        "operation": "readAllRows",
-        "documentId": { "value": "1ne4sn-sPBmMjNYfxgy50ac7lZiSD0bKSvqYTf7bSt0s", "__rl": true, "mode": "id" },
-        "sheetName": { "value": "RAB Bangun", "__rl": true, "mode": "name" },
-        "options": { "headerRow": 5 }
-      },
-      "id": "sheets-read-rab",
-      "name": "Sheets — Read RAB",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.5,
-      "position": [680, 160],
-      "credentials": {
-        "googleSheetsOAuth2Api": { "id": "google-sheets-cred", "name": "Google Sheets" }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "readAllRows",
-        "documentId": { "value": "1ne4sn-sPBmMjNYfxgy50ac7lZiSD0bKSvqYTf7bSt0s", "__rl": true, "mode": "id" },
-        "sheetName": { "value": "Fee Jasa Arsitek", "__rl": true, "mode": "name" },
-        "options": { "headerRow": 4 }
-      },
-      "id": "sheets-read-fee",
-      "name": "Sheets — Read Fee",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.5,
-      "position": [680, 400],
-      "credentials": {
-        "googleSheetsOAuth2Api": { "id": "google-sheets-cred", "name": "Google Sheets" }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "const inputData = $('Normalize Extracted Data').first().json;\nconst rabRows = $('Sheets — Read RAB').all().map(function(i) { return i.json; });\nconst feeRows = $('Sheets — Read Fee').all().map(function(i) { return i.json; });\n\nconst buildingType = inputData.buildingType;\nconst tier = inputData.tier;\nconst areaSqm = inputData.areaSqm;\nconst serviceCategory = inputData.serviceCategory;\n\nconsole.log('RAB columns:', Object.keys(rabRows[0] || {}));\nconsole.log('Looking for:', buildingType, tier);\n\n// Cari baris RAB\nvar rabRow = null;\nfor (var i = 0; i < rabRows.length; i++) {\n  var r = rabRows[i];\n  var vals = Object.values(r);\n  var rowType = String(vals[0] || '').toLowerCase().trim();\n  var rowTier = String(vals[1] || '').toLowerCase().trim();\n  var btLower = buildingType.toLowerCase().split('/')[0].trim();\n  var tierLower = tier.toLowerCase().split('/')[0].trim();\n  if (rowType.indexOf(btLower) !== -1 && rowTier.indexOf(tierLower) !== -1) {\n    rabRow = r; break;\n  }\n}\nif (!rabRow) {\n  for (var j = 0; j < rabRows.length; j++) {\n    var r2 = rabRows[j];\n    var rowType2 = String(Object.values(r2)[0] || '').toLowerCase();\n    if (rowType2.indexOf(buildingType.toLowerCase().split('/')[0].trim()) !== -1) {\n      rabRow = r2; break;\n    }\n  }\n}\nif (!rabRow) rabRow = rabRows[1] || rabRows[0] || {};\n\nvar cleanNum = function(val) {\n  if (typeof val === 'number') return val;\n  return parseFloat(String(val).replace(/[^0-9.]/g, '')) || 0;\n};\n\nvar rabVals = Object.values(rabRow);\nvar rabPriceMin = cleanNum(rabVals[2] || 0);\nvar rabPriceMax = cleanNum(rabVals[3] || 0);\nvar area = areaSqm || 100;\nvar rabMin = rabPriceMin * area;\nvar rabMax = rabPriceMax * area;\nvar rabAvg = (rabMin + rabMax) / 2;\nvar spec = String(rabVals[4] || '');\n\n// Cari baris Fee\nvar feeRow = null;\nfor (var k = 0; k < feeRows.length; k++) {\n  var f = feeRows[k];\n  var rowCat = String(Object.values(f)[0] || '').toLowerCase();\n  var catLower = serviceCategory.toLowerCase();\n  if (rowCat.indexOf(catLower) !== -1 || rowCat.indexOf(catLower.split('/')[0].trim()) !== -1) {\n    feeRow = f; break;\n  }\n}\nif (!feeRow) feeRow = feeRows[0] || {};\n\nvar feePctRaw = Object.values(feeRow)[2] || 7;\nvar feePctStr = String(feePctRaw).replace('%', '').trim();\nvar feePctMin, feePctMax;\nif (feePctStr.indexOf('-') !== -1) {\n  var parts = feePctStr.split('-');\n  feePctMin = parseFloat(parts[0]) || 7;\n  feePctMax = parseFloat(parts[1]) || 10;\n} else {\n  feePctMin = feePctMax = parseFloat(feePctStr) || 7;\n}\n\nvar feeMin = rabAvg * feePctMin / 100;\nvar feeMax = rabAvg * feePctMax / 100;\nvar feeAvg = (feeMin + feeMax) / 2;\nvar ppn = feeAvg * 0.11;\nvar totalFee = feeAvg + ppn;\n\nvar fmt = function(n) {\n  if (n >= 1000000000) return 'Rp ' + (n/1000000000).toFixed(1) + ' M';\n  if (n >= 1000000) return 'Rp ' + Math.round(n/1000000) + ' jt';\n  return 'Rp ' + n.toLocaleString('id-ID');\n};\n\nreturn [{\n  json: {\n    from: inputData.from,\n    clientName: inputData.clientName,\n    phoneNumberId: inputData.phoneNumberId,\n    area: area,\n    result: {\n      buildingType: buildingType, tier: tier, areaSqm: area, spec: spec,\n      rabMin: rabMin, rabMax: rabMax, rabAvg: rabAvg,\n      rabMinFmt: fmt(rabMin), rabMaxFmt: fmt(rabMax), rabAvgFmt: fmt(rabAvg),\n      serviceCategory: serviceCategory,\n      feePctMin: feePctMin, feePctMax: feePctMax,\n      feeMin: feeMin, feeMax: feeMax, feeAvg: feeAvg,\n      feeMinFmt: fmt(feeMin), feeMaxFmt: fmt(feeMax), feeAvgFmt: fmt(feeAvg),\n      ppn: ppn, ppnFmt: fmt(ppn),\n      totalFee: totalFee, totalFeeFmt: fmt(totalFee),\n      areaAssumed: !areaSqm\n    }\n  }\n}];"
-      },
-      "id": "calculate",
-      "name": "Calculate RAB + Fee",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [900, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "var r = $json.result;\nvar name = ($json.clientName || 'kak').split(' ')[0];\nvar areaNote = r.areaAssumed ? '\\n(estimasi berdasarkan luas 100m2, sesuaikan kalau beda ya)' : '';\nvar feeRange = r.feePctMin !== r.feePctMax ? r.feePctMin + '-' + r.feePctMax + '%' : r.feePctMin + '%';\nvar feeDisplay = r.feePctMin !== r.feePctMax ? r.feeMinFmt + ' - ' + r.feeMaxFmt : r.feeAvgFmt;\n\nvar replyText = 'Halo ' + name + ', ini estimasi kasarnya ya.' +\n  '\\n\\nProyek: ' + r.buildingType + ' ' + r.tier +\n  '\\nLuas: ' + r.areaSqm + 'm2' + areaNote +\n  (r.spec ? '\\nSpesifikasi: ' + r.spec : '') +\n  '\\n\\nEstimasi RAB Konstruksi:' +\n  '\\n' + r.rabMinFmt + ' - ' + r.rabMaxFmt +\n  '\\n(rata-rata ' + r.rabAvgFmt + ')' +\n  '\\n\\nFee Jasa Desain Sudut Ruang (' + feeRange + ' dari RAB):' +\n  '\\n' + feeDisplay +\n  '\\n\\nPPN 11%: ' + r.ppnFmt +\n  '\\nTotal Fee Jasa: ' + r.totalFeeFmt +\n  '\\n\\nIni masih estimasi awal ya, bisa berubah setelah survey dan diskusi detail.' +\n  '\\n\\nMau kita buatkan proposal lengkap?';\n\nreturn [{ json: { ...$json, replyText: replyText } }];"
+        "jsCode": "const d = $json;\nconst name = (d.clientName || 'kak').split(' ')[0];\nconst areaNote = d.areaAssumed ? '\\n(estimasi berdasarkan luas 100m2, sesuaikan kalau beda ya)' : '';\nconst feeRange = d.feePctMin !== d.feePctMax ? d.feePctMin + '-' + d.feePctMax + '%' : d.feePctMin + '%';\nconst feeDisplay = d.feePctMin !== d.feePctMax ? d.feeMinFmt + ' - ' + d.feeMaxFmt : d.feeAvgFmt;\n\nconst replyText = `Halo ${name}, ini estimasi dari Syifa ya.\\n\\nProyek: ${d.buildingType} (${d.tier})\\nLuas: ${d.area}m2${areaNote}\\n\\nEstimasi RAB Konstruksi:\\n${d.rabMinFmt} - ${d.rabMaxFmt}\\n(rata-rata ${d.rabAvgFmt})\\n\\nFee Jasa Desain Sudut Ruang (${feeRange} dari RAB):\\n${feeDisplay}\\n\\nPPN 11%: ${d.ppnFmt}\\nTotal Fee Jasa: ${d.totalFeeFmt}\\n\\nIni masih estimasi awal ya, bisa berubah setelah survey dan diskusi detail.\\n\\nMau kita buatkan proposal lengkap?`;\n\nreturn [{ json: { ...d, replyText } }];"
       },
       "id": "build-reply",
       "name": "Build WA Reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1120, 300]
+      "position": [680, 300]
     },
     {
       "parameters": {
@@ -88,44 +46,38 @@
       "name": "Send WA — Estimasi",
       "type": "n8n-nodes-base.whatsApp",
       "typeVersion": 1,
-      "position": [1340, 160],
+      "position": [900, 160],
       "credentials": {
         "whatsAppApi": { "id": "wa-cred", "name": "WhatsApp Business Cloud" }
       }
     },
     {
       "parameters": {
-        "operation": "appendOrUpdate",
-        "documentId": { "value": "1ne4sn-sPBmMjNYfxgy50ac7lZiSD0bKSvqYTf7bSt0s", "__rl": true, "mode": "id" },
-        "sheetName": { "value": "clients_database", "__rl": true, "mode": "name" },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "phone": "={{ $json.from }}",
-            "name": "={{ $json.clientName }}",
-            "last_intent": "ASK_PRICE",
-            "building_type": "={{ $json.result.buildingType }}",
-            "tier": "={{ $json.result.tier }}",
-            "area_sqm": "={{ $json.area }}",
-            "rab_avg": "={{ $json.result.rabAvg }}",
-            "fee_avg": "={{ $json.result.feeAvg }}",
-            "status": "lead",
-            "last_contact": "={{ $now.format('yyyy-MM-dd HH:mm') }}",
-            "source": "whatsapp"
+        "method": "POST",
+        "url": "https://wbfqudrzwsnlzevxjlkm.supabase.co/rest/v1/clients",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"id\": \"{{ $json.from }}\",\n  \"name\": {{ JSON.stringify($json.clientName) }},\n  \"phone\": \"{{ $json.from }}\",\n  \"source\": \"whatsapp\",\n  \"status\": \"estimasi\",\n  \"building_type\": \"{{ $json.buildingType }}\",\n  \"tier\": \"{{ $json.tier }}\",\n  \"area_sqm\": {{ $json.area }},\n  \"rab_avg\": {{ $json.rabAvg }},\n  \"fee_avg\": {{ $json.feeAvg }},\n  \"last_contact_at\": \"{{ $now }}\",\n  \"metadata\": {}\n}",
+        "options": {
+          "headers": {
+            "entries": [
+              { "name": "Prefer", "value": "resolution=merge-duplicates,return=minimal" },
+              { "name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndiZnF1ZHJ6d3NubHpldnhqbGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2OTY2NjUsImV4cCI6MjA5NTI3MjY2NX0.6ceWsWJ2g9ilLdHvKgolh7rKt5X8JEQyBHwDEhGJ4lc" }
+            ]
           }
-        },
-        "matchingColumns": ["phone"],
-        "options": {}
+        }
       },
-      "id": "sheets-log-client",
-      "name": "Sheets — Log Client",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.5,
-      "position": [1340, 360],
+      "id": "supabase-upsert-client",
+      "name": "Supabase — Upsert Client",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 360],
       "credentials": {
-        "googleSheetsOAuth2Api": { "id": "google-sheets-cred", "name": "Google Sheets" }
+        "httpHeaderAuth": { "id": "supabase-cred", "name": "Supabase Authorization" }
       },
-      "notes": "Buat sheet 'clients_database' dulu di spreadsheet.\nKolom: phone | name | last_intent | building_type | tier | area_sqm | rab_avg | fee_avg | status | last_contact | source"
+      "notes": "Credentials: HTTP Header Auth\nName: Authorization\nValue: Bearer eyJhbGci... (Supabase anon key)"
     },
     {
       "parameters": {
@@ -133,30 +85,18 @@
         "url": "https://n8n.srv1696073.hstgr.cloud/webhook/incoming-conversation",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"conversationId\": \"{{ $json.from }}\",\n  \"clientName\": {{ JSON.stringify($json.clientName) }},\n  \"source\": \"whatsapp\",\n  \"lastMessage\": {{ JSON.stringify($json.replyText) }},\n  \"mode\": \"ai\",\n  \"intent\": \"ASK_PRICE\",\n  \"metadata\": {\n    \"buildingType\": \"{{ $json.result.buildingType }}\",\n    \"tier\": \"{{ $json.result.tier }}\",\n    \"areaSqm\": {{ $json.result.areaSqm }},\n    \"estimatedValue\": \"{{ $json.result.totalFeeFmt }}\"\n  },\n  \"timestamp\": \"{{ $now }}\"\n}",
+        "jsonBody": "={\n  \"conversationId\": \"{{ $json.from }}\",\n  \"clientName\": {{ JSON.stringify($json.clientName) }},\n  \"source\": \"whatsapp\",\n  \"lastMessage\": {{ JSON.stringify($json.replyText) }},\n  \"mode\": \"ai\",\n  \"intent\": \"ASK_PRICE\",\n  \"needsHuman\": false,\n  \"metadata\": {\n    \"buildingType\": \"{{ $json.buildingType }}\",\n    \"tier\": \"{{ $json.tier }}\",\n    \"areaSqm\": {{ $json.area }},\n    \"estimatedValue\": \"{{ $json.totalFeeFmt }}\"\n  },\n  \"timestamp\": \"{{ $now }}\"\n}",
         "options": {}
       },
       "id": "notify-dashboard",
       "name": "Notify Dashboard",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, 560]
+      "position": [900, 560]
     }
   ],
   "connections": {
     "Webhook — Trigger from WF1": {
-      "main": [[{ "node": "Normalize Extracted Data", "type": "main", "index": 0 }]]
-    },
-    "Normalize Extracted Data": {
-      "main": [[
-        { "node": "Sheets — Read RAB", "type": "main", "index": 0 },
-        { "node": "Sheets — Read Fee", "type": "main", "index": 0 }
-      ]]
-    },
-    "Sheets — Read RAB": {
-      "main": [[{ "node": "Calculate RAB + Fee", "type": "main", "index": 0 }]]
-    },
-    "Sheets — Read Fee": {
       "main": [[{ "node": "Calculate RAB + Fee", "type": "main", "index": 0 }]]
     },
     "Calculate RAB + Fee": {
@@ -165,7 +105,7 @@
     "Build WA Reply": {
       "main": [[
         { "node": "Send WA — Estimasi", "type": "main", "index": 0 },
-        { "node": "Sheets — Log Client", "type": "main", "index": 0 },
+        { "node": "Supabase — Upsert Client", "type": "main", "index": 0 },
         { "node": "Notify Dashboard", "type": "main", "index": 0 }
       ]]
     }
