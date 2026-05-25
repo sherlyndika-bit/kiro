@@ -15,6 +15,7 @@
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
+/* ─── Global Scrollbar (tipis, tidak mengganggu) ─── */
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
@@ -28,6 +29,72 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #c6c6cd;
+}
+
+/* ─── Custom Scrollbar — Anatomi Lengkap ─── *
+ *
+ *  Struktur scrollbar webkit:
+ *  ┌────────────────────────────┐
+ *  │  ::-webkit-scrollbar       │  → ukuran keseluruhan rel
+ *  │  ┌──────────────────────┐  │
+ *  │  │ ::-webkit-scrollbar- │  │  → tombol panah atas (biasanya disembunyikan)
+ *  │  │   button (up)        │  │
+ *  │  ├──────────────────────┤  │
+ *  │  │ ::-webkit-scrollbar- │  │  → area track (jalur kosong)
+ *  │  │   track-piece        │  │
+ *  │  ├──────────────────────┤  │
+ *  │  │ ::-webkit-scrollbar- │  │  → thumb (kotak yang di-drag)
+ *  │  │   thumb              │  │
+ *  │  ├──────────────────────┤  │
+ *  │  │ ::-webkit-scrollbar- │  │  → area track bawah thumb
+ *  │  │   track-piece:end    │  │
+ *  │  ├──────────────────────┤  │
+ *  │  │ ::-webkit-scrollbar- │  │  → tombol panah bawah
+ *  │  │   button (down)      │  │
+ *  │  └──────────────────────┘  │
+ *  │  ::-webkit-scrollbar-      │  → pojok pertemuan H + V scrollbar
+ *  │    corner                  │
+ *  └────────────────────────────┘
+ */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;   /* lebar rel vertikal */
+  height: 6px;  /* tinggi rel horizontal */
+}
+
+/* Track — jalur kosong di belakang thumb */
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f3f5;          /* warna jalur */
+  border-radius: 10px;          /* sudut membulat */
+  margin: 4px 0;                /* jarak atas-bawah supaya tidak mentok */
+}
+
+/* Thumb — kotak yang bisa di-drag */
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #c9cdd2;          /* warna thumb normal */
+  border-radius: 10px;          /* sudut membulat */
+  border: 1px solid #f1f3f5;    /* border tipis agar ada "gap" visual ke track */
+  min-height: 32px;             /* panjang minimum thumb agar mudah di-klik */
+}
+
+/* Thumb saat di-hover */
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #9ea5ad;          /* lebih gelap saat hover */
+}
+
+/* Thumb saat aktif / sedang di-drag */
+.custom-scrollbar::-webkit-scrollbar-thumb:active {
+  background: #6c757d;          /* paling gelap saat drag */
+}
+
+/* Corner — pojok antara scrollbar vertikal + horizontal */
+.custom-scrollbar::-webkit-scrollbar-corner {
+  background: #f1f3f5;          /* samakan dengan track */
+}
+
+/* Firefox fallback (tidak support pseudo-element, pakai property) */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #c9cdd2 #f1f3f5; /* thumb track */
 }
 
 .glass-card {
