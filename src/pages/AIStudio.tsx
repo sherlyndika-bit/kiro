@@ -102,7 +102,7 @@ const AIStudio: React.FC = () => {
   }
 
   return (
-    <div className="p-gutter max-w-container-max space-y-md">
+    <div className="p-gutter space-y-md">
       <div>
         <h1 className="font-display-lg text-display-lg font-bold text-on-background">AI Studio</h1>
         <p className="text-body-md text-on-surface-variant">
@@ -213,9 +213,9 @@ const AIStudio: React.FC = () => {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-md items-stretch">
                 {templates.map((t) => (
-                  <div key={t.id} className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+                  <div key={t.id} className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col">
                     <div className="flex items-start justify-between mb-sm">
                       <div>
                         <span className={`text-label-caps px-2 py-0.5 rounded-full font-bold uppercase text-[10px] ${
@@ -240,7 +240,7 @@ const AIStudio: React.FC = () => {
                         </button>
                       </div>
                     </div>
-                    <p className="text-body-md text-on-surface-variant line-clamp-3 font-mono-label text-[12px] bg-surface-container rounded-lg p-sm">
+                    <p className="text-body-md text-on-surface-variant line-clamp-3 font-mono-label text-[12px] bg-surface-container rounded-lg p-sm flex-1">
                       {t.content}
                     </p>
                   </div>
