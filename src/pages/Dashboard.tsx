@@ -112,7 +112,7 @@ const Dashboard: React.FC = () => {
   ]
 
   return (
-    <div className="p-gutter max-w-container-max space-y-md">
+    <div className="p-gutter space-y-md">
       <div>
         <h1 className="font-display-lg text-display-lg font-bold text-on-background">
           Dashboard
@@ -141,9 +141,9 @@ const Dashboard: React.FC = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-md">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-md items-stretch">
         {/* Recent Conversations */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col">
           <div className="flex items-center justify-between mb-md">
             <h3 className="font-headline-sm text-headline-sm font-bold">Percakapan Terbaru</h3>
             <div className="flex items-center gap-xs">
@@ -203,7 +203,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Recent Documents */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col">
           <div className="flex items-center justify-between mb-md">
             <h3 className="font-headline-sm text-headline-sm font-bold">Dokumen Terbaru</h3>
           </div>
