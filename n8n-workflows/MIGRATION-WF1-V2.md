@@ -77,17 +77,20 @@ OTHER                                     → reply probe (jangan ghosting)
 
 ## Test cases yang dijamin pass (sudah dijalanin local)
 
+Semua balasan kini pakai **persona Syifa** ✨
+
 | Input pesan | Expected actionType | Reply ada? | Trigger |
 |---|---|---|---|
-| "Halo" | `greeting` | ✓ | — |
-| "asdf qwerty" (low conf) | `human` | ✓ | flag dashboard |
-| "biaya cafe 80m2" | `estimator` | ✓ | WF2 |
-| "tolong buatkan proposal" | `proposal` | ✓ | WF3 |
-| "kapan bisa survey?" | `human` | ✓ | flag dashboard |
-| "p" / "test" / "ada org?" | `greeting` (Groq classify) atau `human` (low conf) | ✓ | sesuai |
+| "Halo" | `greeting` (Syifa kenalin diri) | ✓ | — |
+| "asdf qwerty" (low conf) | `human` (Syifa teruskan ke tim) | ✓ | flag dashboard |
+| "biaya cafe 80m2" | `estimator` (Syifa hitungin) | ✓ | WF2 |
+| "tolong buatkan proposal" | `proposal` (Syifa siapin) | ✓ | WF3 |
+| "kapan bisa survey?" | `human` (Syifa teruskan ke tim) | ✓ | flag dashboard |
+| "p" / "test" / "ada org?" | `greeting` atau `human` (sesuai confidence) | ✓ | sesuai |
 
 ## Catatan khusus
 
-- **Groq prompt** sudah diperkuat: pesan singkat (halo/p/test/ada org/yo/assalamualaikum/permisi) explicit dipetakan ke `GREETING` confidence 0.95 — meminimalkan misclassification
+- **Persona Syifa**: Semua balasan WA otomatis ngenalin diri sebagai "Syifa, AI assistant Sudut Ruang". Konsisten dengan label di Settings page (`Konfigurasi AI — Syifa`)
+- **Groq prompt** sudah diperkuat: pesan singkat (halo/p/test/ada org/yo/assalamualaikum/permisi) explicit dipetakan ke `GREETING` confidence 0.95 — meminimalkan misclassification. Pesan yang menyebut "Syifa" juga otomatis di-classify GREETING
 - **Confidence threshold 0.45**: bisa di-tune di Build Decision line `confidence < 0.45`. Naikkan kalau mau lebih agresif eskalasi ke human, turunkan kalau AI dipercaya lebih
 - **Message order**: Send WA Reply, Notify Dashboard, dan kedua IF trigger semua jalan **paralel** dari Build Decision. Ini disengaja biar latency balasan ke client cepat
