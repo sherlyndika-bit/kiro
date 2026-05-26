@@ -128,19 +128,19 @@ const AIStudio: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-surface-container rounded-xl p-1">
+      <div className="flex gap-1 bg-surface-container rounded-xl p-1 overflow-x-auto no-scrollbar">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-xs py-2 px-sm rounded-lg text-body-md font-bold transition-all ${
+            className={`flex-1 min-w-[80px] flex items-center justify-center gap-xs py-2 px-sm rounded-lg text-body-md font-bold transition-all whitespace-nowrap ${
               activeTab === tab.id
                 ? 'bg-white shadow-sm text-primary'
                 : 'text-on-surface-variant hover:text-on-background'
             }`}
           >
             <span className="material-symbols-outlined text-[18px]">{tab.icon}</span>
-            <span className="hidden md:block">{tab.label}</span>
+            <span className="hidden sm:inline">{tab.label}</span>
           </button>
         ))}
       </div>
