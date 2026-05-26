@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { AIConfigService } from '../services/supabaseClient'
+import { n8nService } from '../services/n8nWebhookService'
 
 const Settings: React.FC = () => {
   const [config, setConfig] = useState<Record<string, string>>({})
@@ -13,7 +14,9 @@ const Settings: React.FC = () => {
   const [companyName, setCompanyName] = useState('Sudut Ruang')
   const [companyEmail, setCompanyEmail] = useState('hello@sudutruang.id')
   const [companyPhone, setCompanyPhone] = useState('+62 812-3456-7890')
-  const [webhookUrl, setWebhookUrl] = useState('https://n8n.srv1696073.hstgr.cloud/webhook')
+  const [webhookUrl, setWebhookUrl] = useState(
+    n8nService.getBaseUrl() || 'https://n8n.srv1696073.hstgr.cloud/webhook',
+  )
 
   // AI toggles state
   const [aiToggles, setAiToggles] = useState({
@@ -34,7 +37,10 @@ const Settings: React.FC = () => {
     if (cfg.company_name) setCompanyName(cfg.company_name)
     if (cfg.company_email) setCompanyEmail(cfg.company_email)
     if (cfg.company_phone) setCompanyPhone(cfg.company_phone)
-    if (cfg.webhook_url) setWebhookUrl(cfg.webhook_url)
+    if (cfg.webhook_url) {
+      setWebhookUrl(cfg.webhook_url)
+      n8nService.setBaseUrl(cfg.webhook_url)
+    }
 
     setAiToggles({
       auto_reply_enabled: cfg.auto_reply_enabled !== 'false',
@@ -54,6 +60,8 @@ const Settings: React.FC = () => {
       AIConfigService.set('company_phone', companyPhone),
       AIConfigService.set('webhook_url', webhookUrl),
     ])
+    // Wire ke n8nService supaya seluruh aplikasi pakai URL baru
+    n8nService.setBaseUrl(webhookUrl)
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -68,18 +76,10 @@ const Settings: React.FC = () => {
   const testConnection = async () => {
     setTestingConn(true)
     setConnStatus('idle')
-    try {
-      const res = await fetch(`${webhookUrl}/ping`, { method: 'GET', signal: AbortSignal.timeout(5000) })
-      setConnStatus(res.ok ? 'ok' : 'fail')
-    } catch {
-      // coba endpoint lain
-      try {
-        const res2 = await fetch(webhookUrl, { method: 'GET', signal: AbortSignal.timeout(5000) })
-        setConnStatus(res2.status < 500 ? 'ok' : 'fail')
-      } catch {
-        setConnStatus('fail')
-      }
-    }
+    // Pastikan service pakai URL terkini sebelum ping
+    n8nService.setBaseUrl(webhookUrl)
+    const ok = await n8nService.ping(5000)
+    setConnStatus(ok ? 'ok' : 'fail')
     setTestingConn(false)
   }
 
@@ -288,6 +288,34 @@ const Settings: React.FC = () => {
               </span>
               {testingConn ? 'Testing...' : 'Test Connection'}
             </button>
+
+            {/* Workflow endpoints reference */}
+            <div className="border-t border-outline-variant pt-md">
+              <h4 className="font-label-caps text-label-caps text-outline uppercase mb-sm">
+                Workflow Endpoints (n8n)
+              </h4>
+              <ul className="space-y-1 text-[11px] font-mono-label">
+                {[
+                  { wf: 'WF1', label: 'Incoming WA Trigger', path: '(Meta WhatsApp Cloud webhook)' },
+                  { wf: 'WF2', label: 'Auto Estimator', path: '/wa-estimator' },
+                  { wf: 'WF3', label: 'Proposal Generator', path: '/wa-proposal' },
+                  { wf: 'WF4', label: 'Supabase Sync Hub', path: '/incoming-conversation' },
+                  { wf: 'WF0', label: 'Dashboard → Client (manual)', path: '/dashboard-message' },
+                  { wf: '—', label: 'Toggle AI/Manual mode', path: '/toggle-mode' },
+                ].map((row) => (
+                  <li
+                    key={row.wf + row.path}
+                    className="flex items-start justify-between gap-sm py-1 border-b border-outline-variant/40 last:border-0"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-bold text-on-background">{row.wf}</span>{' '}
+                      <span className="text-on-surface-variant">{row.label}</span>
+                    </div>
+                    <span className="text-outline truncate">{row.path}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
       </div>
