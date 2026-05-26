@@ -150,10 +150,9 @@ const ChatMonitoring: React.FC = () => {
     mobileView === 'panel' ? 'flex' : 'hidden lg:flex'
 
   return (
-    <div
-      className="flex-1 flex"
-      style={{ height: 'calc(100vh - 64px)', overflow: 'hidden' }}
-    >
+    // h-full = parent (App.tsx) sudah constrain ke viewport - TopBar.
+    // Tidak perlu inline calc(100vh - 64px) yang error di mobile karena URL bar.
+    <div className="flex h-full overflow-hidden">
       {/* Column 1: Conversation List */}
       <section
         className={`${listVisibility} w-full md:w-72 lg:w-80 border-r border-outline-variant bg-surface-container-lowest flex-col flex-shrink-0 min-h-0`}
