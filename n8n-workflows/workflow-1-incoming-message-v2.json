@@ -93,10 +93,15 @@
     },
     {
       "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "messageType": "text",
         "phoneNumberId": "1052743247932102",
         "recipientPhoneNumber": "={{ $json.from }}",
         "textBody": "={{ $json.replyText }}",
-        "additionalFields": {}
+        "additionalFields": {
+          "previewUrl": false
+        }
       },
       "id": "wa-send-reply",
       "name": "Send WA Reply",
@@ -109,7 +114,7 @@
           "name": "WhatsApp Business Cloud"
         }
       },
-      "notes": "Selalu kirim replyText. Build Decision menjamin replyText non-empty."
+      "notes": "Operation: Send Message → Text (free-form, valid dalam window 24 jam setelah customer kirim pesan).\nresource=message, operation=send, messageType=text — eksplisit supaya tidak default ke sendTemplate."
     },
     {
       "parameters": {
