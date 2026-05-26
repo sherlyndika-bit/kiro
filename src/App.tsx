@@ -30,7 +30,7 @@ class PageErrorBoundary extends Component<
   { children: ReactNode; pageKey: string },
   { hasError: boolean; error: string }
 > {
-  constructor(props: any) {
+  constructor(props: { children: ReactNode; pageKey: string }) {
     super(props)
     this.state = { hasError: false, error: '' }
   }
@@ -40,7 +40,6 @@ class PageErrorBoundary extends Component<
   }
 
   componentDidUpdate(prevProps: { pageKey: string }) {
-    // Reset error saat pindah halaman
     if (prevProps.pageKey !== this.props.pageKey && this.state.hasError) {
       this.setState({ hasError: false, error: '' })
     }
@@ -72,6 +71,7 @@ class PageErrorBoundary extends Component<
 
 function App() {
   const [currentPage, setCurrentPage] = useState<PageType>('chat-monitoring')
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   const renderPage = () => {
     switch (currentPage) {
@@ -97,9 +97,17 @@ function App() {
 
   return (
     <div className="min-h-screen bg-background text-on-background">
-      <Sidebar currentPage={currentPage} onPageChange={setCurrentPage} />
-      <main className="ml-[280px] min-h-screen flex flex-col">
-        <TopBar title={pageTitles[currentPage]} />
+      <Sidebar
+        currentPage={currentPage}
+        onPageChange={setCurrentPage}
+        isMobileOpen={isSidebarOpen}
+        onMobileClose={() => setIsSidebarOpen(false)}
+      />
+      <main className="md:ml-[280px] min-h-screen flex flex-col">
+        <TopBar
+          title={pageTitles[currentPage]}
+          onMobileMenuClick={() => setIsSidebarOpen(true)}
+        />
         <PageErrorBoundary pageKey={currentPage}>
           {isFullscreenPage ? (
             renderPage()

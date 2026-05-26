@@ -61,7 +61,7 @@ const Pipeline: React.FC = () => {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-md mb-md">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-md mb-md">
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
           <div className="text-label-caps text-outline uppercase mb-1">Total Pipeline Value</div>
           <div className="font-display-lg text-[28px] font-bold">

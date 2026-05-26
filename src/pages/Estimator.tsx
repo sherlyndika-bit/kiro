@@ -178,7 +178,7 @@ Mau kita buatkan proposal lengkap?`
     if (!rab || !fee) return
     setGeneratingPDF(true)
 
-    // Simpan dokumen proposal ke Supabase
+    // Simpan dokumen proposal ke Supabase sebagai draft lokal
     const proposalNo = `PROP-${Date.now()}`
     await DocumentService.insert({
       conversation_id: null,
@@ -206,8 +206,29 @@ Mau kita buatkan proposal lengkap?`
       valid_until: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
     })
 
+    // Bila ada nama client, trigger n8n WF3 untuk generate PDF + kirim WA
+    let n8nMsg = ''
+    if (clientName) {
+      const phone = clientName.replace(/\s+/g, '_').toLowerCase()
+      const result = await n8nService.triggerProposal({
+        from: phone,
+        clientName,
+        extracted: {
+          building_type: selectedConstruction?.type,
+          tier: selectedConstruction?.tier,
+          area_sqm: parseFloat(area) || null,
+          service_type: selectedService?.category,
+        },
+      })
+      n8nMsg = result.success
+        ? '\nWF3 (Proposal Generator) telah di-trigger di n8n — PDF akan dikirim via WA.'
+        : '\n(Catatan: trigger ke n8n WF3 gagal — proposal tetap tersimpan lokal sebagai draft.)'
+    }
+
     setGeneratingPDF(false)
-    alert(`Proposal ${proposalNo} tersimpan sebagai draft di Documents.\nBuka tab AI Studio → Documents untuk melihatnya.`)
+    alert(
+      `Proposal ${proposalNo} tersimpan sebagai draft di Documents.${n8nMsg}\nBuka tab AI Studio → Documents untuk melihatnya.`,
+    )
   }
 
   return (

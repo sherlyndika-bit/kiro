@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
-  supabase,
   DBConversation,
   DBMessage,
   ConversationService,
@@ -8,6 +7,8 @@ import {
   DBQuickReply,
 } from '../services/supabaseClient'
 import { n8nService } from '../services/n8nWebhookService'
+
+type MobileView = 'list' | 'chat' | 'panel'
 
 const ChatMonitoring: React.FC = () => {
   const [conversations, setConversations] = useState<DBConversation[]>([])
@@ -18,22 +19,19 @@ const ChatMonitoring: React.FC = () => {
   const [quickReplies, setQuickReplies] = useState<DBQuickReply[]>([])
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [loading, setLoading] = useState(true)
+  // Mobile view stack: list → chat → panel
+  const [mobileView, setMobileView] = useState<MobileView>('list')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const selectedConv = conversations.find((c) => c.id === selectedId) || null
-  // Polling interval refs
   const convPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const msgPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  // Track selectedId di ref supaya tidak stale di dalam interval callback
   const selectedIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     loadConversations()
     loadQuickReplies()
-
-    // Polling setiap 3 detik — tidak pakai realtime untuk hindari StrictMode error
     convPollRef.current = setInterval(loadConversations, 3000)
-
     return () => {
       if (convPollRef.current) clearInterval(convPollRef.current)
     }
@@ -43,8 +41,6 @@ const ChatMonitoring: React.FC = () => {
     if (selectedId) {
       loadMessages(selectedId)
       ConversationService.markRead(selectedId)
-
-      // Poll messages setiap 3 detik
       if (msgPollRef.current) clearInterval(msgPollRef.current)
       msgPollRef.current = setInterval(() => loadMessages(selectedId), 3000)
     }
@@ -60,7 +56,6 @@ const ChatMonitoring: React.FC = () => {
   const loadConversations = async () => {
     const data = await ConversationService.getAll()
     setConversations(data)
-    // Hanya set selectedId kalau belum ada yang dipilih (pakai ref bukan state)
     if (data.length > 0 && !selectedIdRef.current) {
       setSelectedId(data[0].id)
       selectedIdRef.current = data[0].id
@@ -78,46 +73,55 @@ const ChatMonitoring: React.FC = () => {
     setQuickReplies(data)
   }
 
-  // Polling-based, tidak pakai realtime Supabase untuk hindari StrictMode issues
+  const handleSelectConversation = (id: string) => {
+    setSelectedId(id)
+    selectedIdRef.current = id
+    setMobileView('chat')
+  }
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !selectedConv) return
+    const text = messageInput
 
     const msg: Omit<DBMessage, 'id' | 'created_at'> = {
       conversation_id: selectedConv.id,
-      content: messageInput,
+      content: text,
       role: 'human',
       source: selectedConv.source,
       ai_confidence: null,
       needs_human_review: false,
-      metadata: {},
+      metadata: { dashboardSent: true },
     }
 
+    setMessageInput('')
+    // Optimistic write ke Supabase, dashboard polling akan tampilkan otomatis
     await ConversationService.insertMessage(msg)
     await ConversationService.upsertConversation({
       id: selectedConv.id,
-      last_message: messageInput,
+      last_message: text,
       last_message_at: new Date().toISOString(),
     })
 
-    // Kirim via n8n ke WA
+    // Forward ke n8n WF0 → kirim ke WA / IG
     await n8nService.sendMessageToClient({
       conversationId: selectedConv.id,
       clientPhoneOrUsername: selectedConv.id,
-      message: messageInput,
+      message: text,
       source: selectedConv.source as 'whatsapp' | 'instagram',
       senderRole: 'human',
       humanOperator: 'Dashboard Operator',
     })
-
-    setMessageInput('')
   }
 
   const handleToggleMode = async () => {
     if (!selectedConv) return
     const newMode = selectedConv.mode === 'ai' ? 'manual' : 'ai'
     await ConversationService.toggleMode(selectedConv.id, newMode)
-    await n8nService.toggleConversationMode({ conversationId: selectedConv.id, newMode })
+    await n8nService.toggleConversationMode({
+      conversationId: selectedConv.id,
+      newMode,
+      triggeredBy: 'dashboard-operator',
+    })
   }
 
   const filtered = conversations.filter((c) =>
@@ -136,10 +140,24 @@ const ChatMonitoring: React.FC = () => {
     return `${Math.floor(mins / 60)}j`
   }
 
+  // Visibility classes per view (mobile shows one column at a time)
+  // md+ shows all 3 columns side-by-side
+  const listVisibility =
+    mobileView === 'list' ? 'flex' : 'hidden md:flex'
+  const chatVisibility =
+    mobileView === 'chat' ? 'flex' : 'hidden md:flex'
+  const panelVisibility =
+    mobileView === 'panel' ? 'flex' : 'hidden lg:flex'
+
   return (
-    <div className="flex-1 flex" style={{ height: 'calc(100vh - 64px)', overflow: 'hidden' }}>
+    <div
+      className="flex-1 flex"
+      style={{ height: 'calc(100vh - 64px)', overflow: 'hidden' }}
+    >
       {/* Column 1: Conversation List */}
-      <section className="w-80 border-r border-outline-variant bg-surface-container-lowest flex flex-col flex-shrink-0 min-h-0">
+      <section
+        className={`${listVisibility} w-full md:w-72 lg:w-80 border-r border-outline-variant bg-surface-container-lowest flex-col flex-shrink-0 min-h-0`}
+      >
         <div className="p-md border-b border-outline-variant">
           <div className="flex items-center justify-between mb-sm">
             <span className="font-label-caps text-label-caps text-outline uppercase">
@@ -177,15 +195,15 @@ const ChatMonitoring: React.FC = () => {
             <div className="p-md text-center text-outline">
               <span className="material-symbols-outlined text-4xl">chat</span>
               <p className="text-body-md mt-2">Belum ada percakapan</p>
+              <p className="text-label-caps mt-1 px-md">
+                Pesan dari WhatsApp/Instagram akan muncul di sini saat n8n WF1 aktif.
+              </p>
             </div>
           ) : (
             filtered.map((conv) => (
               <div
                 key={conv.id}
-                onClick={() => {
-                  setSelectedId(conv.id)
-                  selectedIdRef.current = conv.id
-                }}
+                onClick={() => handleSelectConversation(conv.id)}
                 className={`p-md border-b border-outline-variant cursor-pointer hover:bg-surface-container-low transition-colors ${
                   selectedId === conv.id ? 'bg-surface-container border-l-4 border-l-primary' : ''
                 } ${conv.unread_count > 0 ? 'border-l-4 border-l-error' : ''}`}
@@ -195,9 +213,11 @@ const ChatMonitoring: React.FC = () => {
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-fixed to-secondary-fixed flex items-center justify-center text-primary font-bold">
                       {conv.client_name.charAt(0).toUpperCase()}
                     </div>
-                    <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-bold text-white ${
-                      conv.source === 'whatsapp' ? 'bg-green-500' : 'bg-pink-500'
-                    }`}>
+                    <div
+                      className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-bold text-white ${
+                        conv.source === 'whatsapp' ? 'bg-green-500' : 'bg-pink-500'
+                      }`}
+                    >
                       {conv.source === 'whatsapp' ? 'W' : 'I'}
                     </div>
                   </div>
@@ -206,20 +226,24 @@ const ChatMonitoring: React.FC = () => {
                       <span className="font-bold text-on-background text-[13px] truncate">
                         {conv.client_name}
                       </span>
-                      <span className={`text-label-caps text-[10px] ml-1 flex-shrink-0 ${
-                        conv.unread_count > 0 ? 'text-error font-bold' : 'text-outline'
-                      }`}>
+                      <span
+                        className={`text-label-caps text-[10px] ml-1 flex-shrink-0 ${
+                          conv.unread_count > 0 ? 'text-error font-bold' : 'text-outline'
+                        }`}
+                      >
                         {conv.unread_count > 0 ? 'Baru' : formatTimeAgo(conv.last_message_at)}
                       </span>
                     </div>
                     <p className="text-body-md text-on-surface-variant truncate text-[12px]">
                       {conv.last_message || '—'}
                     </p>
-                    <span className={`mt-1 inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                      conv.mode === 'ai'
-                        ? 'bg-secondary-container text-on-secondary-container'
-                        : 'bg-error-container text-on-error-container'
-                    }`}>
+                    <span
+                      className={`mt-1 inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        conv.mode === 'ai'
+                          ? 'bg-secondary-container text-on-secondary-container'
+                          : 'bg-error-container text-on-error-container'
+                      }`}
+                    >
                       {conv.mode === 'ai' ? 'AI Handled' : 'Human Active'}
                     </span>
                   </div>
@@ -231,44 +255,69 @@ const ChatMonitoring: React.FC = () => {
       </section>
 
       {/* Column 2: Chat Window */}
-      <section className="flex-1 flex flex-col bg-white min-w-0 min-h-0">
+      <section
+        className={`${chatVisibility} flex-1 flex-col bg-white min-w-0 min-h-0`}
+      >
         {selectedConv ? (
           <>
             {/* Header */}
-            <div className="px-gutter h-16 border-b border-outline-variant flex items-center justify-between flex-shrink-0">
-              <div className="flex items-center gap-sm">
-                <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">
+            <div className="px-md md:px-gutter h-16 border-b border-outline-variant flex items-center justify-between flex-shrink-0 gap-sm">
+              <div className="flex items-center gap-sm min-w-0">
+                {/* Mobile back button */}
+                <button
+                  onClick={() => setMobileView('list')}
+                  className="md:hidden -ml-2 p-2 rounded-lg hover:bg-surface-container"
+                  aria-label="Kembali ke daftar percakapan"
+                >
+                  <span className="material-symbols-outlined">arrow_back</span>
+                </button>
+                <div className="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center flex-shrink-0">
                   <span className="material-symbols-outlined text-primary">person</span>
                 </div>
-                <div>
-                  <h3 className="font-bold text-on-background text-[16px] leading-tight">
+                <div className="min-w-0">
+                  <h3 className="font-bold text-on-background text-[16px] leading-tight truncate">
                     {selectedConv.client_name}
                   </h3>
-                  <p className="text-label-caps text-[11px] text-outline">
-                    {selectedConv.source === 'whatsapp' ? 'WhatsApp' : 'Instagram'} • {selectedConv.id}
+                  <p className="text-label-caps text-[11px] text-outline truncate">
+                    {selectedConv.source === 'whatsapp' ? 'WhatsApp' : 'Instagram'} •{' '}
+                    {selectedConv.id}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-md">
-                <div className={`flex items-center gap-xs px-3 py-1.5 rounded-full border ${
-                  selectedConv.mode === 'ai'
-                    ? 'bg-emerald-50 border-emerald-100'
-                    : 'bg-orange-50 border-orange-200'
-                }`}>
-                  <span className={`w-2 h-2 rounded-full ${
-                    selectedConv.mode === 'ai' ? 'bg-emerald-500' : 'bg-orange-500'
-                  }`} />
-                  <span className={`text-label-caps uppercase font-bold ${
-                    selectedConv.mode === 'ai' ? 'text-emerald-700' : 'text-orange-700'
-                  }`}>
-                    {selectedConv.mode === 'ai' ? 'AI Active' : 'Human Active'}
+              <div className="flex items-center gap-sm flex-shrink-0">
+                <div
+                  className={`hidden sm:flex items-center gap-xs px-3 py-1.5 rounded-full border ${
+                    selectedConv.mode === 'ai'
+                      ? 'bg-emerald-50 border-emerald-100'
+                      : 'bg-orange-50 border-orange-200'
+                  }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      selectedConv.mode === 'ai' ? 'bg-emerald-500' : 'bg-orange-500'
+                    }`}
+                  />
+                  <span
+                    className={`text-label-caps uppercase font-bold ${
+                      selectedConv.mode === 'ai' ? 'text-emerald-700' : 'text-orange-700'
+                    }`}
+                  >
+                    {selectedConv.mode === 'ai' ? 'AI' : 'Human'}
                   </span>
                 </div>
+                {/* Mobile control panel button */}
+                <button
+                  onClick={() => setMobileView('panel')}
+                  className="lg:hidden p-2 rounded-lg hover:bg-surface-container"
+                  aria-label="Buka control panel"
+                >
+                  <span className="material-symbols-outlined">tune</span>
+                </button>
               </div>
             </div>
 
             {/* Messages */}
-            <div className="custom-scrollbar flex-1 p-gutter overflow-y-auto flex flex-col gap-lg bg-background/30 min-h-0">
+            <div className="custom-scrollbar flex-1 p-md md:p-gutter overflow-y-auto flex flex-col gap-md md:gap-lg bg-background/30 min-h-0">
               {messages.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center text-outline">
                   <div className="text-center">
@@ -280,24 +329,28 @@ const ChatMonitoring: React.FC = () => {
                 messages.map((msg) => (
                   <div
                     key={msg.id}
-                    className={`flex flex-col max-w-[80%] ${
+                    className={`flex flex-col max-w-[85%] md:max-w-[80%] ${
                       msg.role === 'client' ? 'items-start' : 'items-end self-end'
                     }`}
                   >
-                    <div className={`px-md py-3 rounded-xl shadow-sm relative overflow-hidden ${
-                      msg.role === 'client'
-                        ? 'bg-white border border-outline-variant rounded-tl-none'
-                        : msg.role === 'ai'
-                        ? 'bg-gradient-to-br from-surface-container-low to-surface-container rounded-tr-none border border-primary/5'
-                        : 'bg-primary text-on-primary rounded-tr-none'
-                    }`}>
+                    <div
+                      className={`px-md py-3 rounded-xl shadow-sm relative overflow-hidden ${
+                        msg.role === 'client'
+                          ? 'bg-white border border-outline-variant rounded-tl-none'
+                          : msg.role === 'ai'
+                          ? 'bg-gradient-to-br from-surface-container-low to-surface-container rounded-tr-none border border-primary/5'
+                          : 'bg-primary text-on-primary rounded-tr-none'
+                      }`}
+                    >
                       {msg.role !== 'client' && (
                         <div className="text-[10px] opacity-60 mb-1 uppercase font-bold">
-                          {msg.role === 'ai' ? '🤖 AI Agent' : '👤 Human'}
-                          {msg.ai_confidence ? ` • ${Math.round(msg.ai_confidence * 100)}%` : ''}
+                          {msg.role === 'ai' ? 'AI Agent' : 'Human'}
+                          {msg.ai_confidence
+                            ? ` • ${Math.round(msg.ai_confidence * 100)}%`
+                            : ''}
                         </div>
                       )}
-                      <p className="text-body-md whitespace-pre-wrap">{msg.content}</p>
+                      <p className="text-body-md whitespace-pre-wrap break-words">{msg.content}</p>
                     </div>
                     <span className="text-label-caps text-[10px] text-outline mt-1 mx-1">
                       {formatTime(msg.created_at)}
@@ -310,7 +363,6 @@ const ChatMonitoring: React.FC = () => {
 
             {/* Input */}
             <div className="p-md border-t border-outline-variant bg-white flex-shrink-0">
-              {/* Quick Replies */}
               {showQuickReplies && quickReplies.length > 0 && (
                 <div className="mb-sm overflow-x-auto no-scrollbar">
                   <div className="flex gap-2 pb-1">
@@ -350,16 +402,16 @@ const ChatMonitoring: React.FC = () => {
                   }}
                   placeholder={
                     selectedConv.mode === 'ai'
-                      ? 'AI sedang aktif — switch ke Manual untuk balas manual...'
+                      ? 'AI sedang aktif — switch ke Manual untuk balas...'
                       : 'Ketik pesan...'
                   }
-                  className="flex-1 bg-transparent border-none focus:ring-0 outline-none text-body-md resize-none py-1"
+                  className="flex-1 bg-transparent border-none focus:ring-0 outline-none text-body-md resize-none py-1 min-w-0"
                   disabled={selectedConv.mode === 'ai'}
                 />
                 <button
                   onClick={handleSendMessage}
                   disabled={!messageInput.trim() || selectedConv.mode === 'ai'}
-                  className="bg-primary text-on-primary w-10 h-10 rounded-lg flex items-center justify-center hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-40"
+                  className="bg-primary text-on-primary w-10 h-10 rounded-lg flex items-center justify-center hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-40 flex-shrink-0"
                 >
                   <span className="material-symbols-outlined">send</span>
                 </button>
@@ -367,7 +419,7 @@ const ChatMonitoring: React.FC = () => {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-outline">
+          <div className="flex-1 flex items-center justify-center text-outline p-md">
             <div className="text-center">
               <span className="material-symbols-outlined text-6xl">chat</span>
               <p className="text-body-md mt-2">Pilih percakapan untuk memulai</p>
@@ -377,7 +429,21 @@ const ChatMonitoring: React.FC = () => {
       </section>
 
       {/* Column 3: Control Panel */}
-      <section className="w-80 bg-background border-l border-outline-variant p-gutter flex flex-col gap-md overflow-y-auto custom-scrollbar flex-shrink-0 min-h-0">
+      <section
+        className={`${panelVisibility} w-full lg:w-80 bg-background border-l border-outline-variant p-md lg:p-gutter flex-col gap-md overflow-y-auto custom-scrollbar flex-shrink-0 min-h-0`}
+      >
+        {/* Mobile header with back */}
+        <div className="flex items-center justify-between lg:hidden mb-sm">
+          <button
+            onClick={() => setMobileView('chat')}
+            className="-ml-2 p-2 rounded-lg hover:bg-surface-container flex items-center gap-xs"
+            aria-label="Kembali ke chat"
+          >
+            <span className="material-symbols-outlined">arrow_back</span>
+            <span className="text-body-md font-bold">Control Panel</span>
+          </button>
+        </div>
+
         {/* System Control */}
         <div className="glass-card border border-outline-variant rounded-xl p-md">
           <h4 className="font-label-caps text-label-caps text-outline uppercase mb-md">
@@ -390,10 +456,13 @@ const ChatMonitoring: React.FC = () => {
               className={`w-12 h-6 rounded-full relative cursor-pointer shadow-inner transition-colors ${
                 selectedConv?.mode === 'ai' ? 'bg-emerald-500' : 'bg-outline'
               }`}
+              aria-label="Toggle AI/Manual mode"
             >
-              <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-all ${
-                selectedConv?.mode === 'ai' ? 'right-1' : 'left-1'
-              }`} />
+              <div
+                className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-all ${
+                  selectedConv?.mode === 'ai' ? 'right-1' : 'left-1'
+                }`}
+              />
             </button>
           </div>
           <button
@@ -411,13 +480,16 @@ const ChatMonitoring: React.FC = () => {
         {/* AI Confidence */}
         <div className="glass-card border border-outline-variant rounded-xl p-md">
           <div className="flex justify-between items-center mb-md">
-            <h4 className="font-label-caps text-label-caps text-outline uppercase">AI Confidence</h4>
+            <h4 className="font-label-caps text-label-caps text-outline uppercase">
+              AI Confidence
+            </h4>
             <span className="text-emerald-500 font-mono-label font-bold">
               {selectedConv && messages.length > 0
                 ? (() => {
                     const aiMsgs = messages.filter((m) => m.role === 'ai' && m.ai_confidence)
                     if (aiMsgs.length === 0) return 'N/A'
-                    const avg = aiMsgs.reduce((s, m) => s + (m.ai_confidence || 0), 0) / aiMsgs.length
+                    const avg =
+                      aiMsgs.reduce((s, m) => s + (m.ai_confidence || 0), 0) / aiMsgs.length
                     return `${Math.round(avg * 100)}%`
                   })()
                 : 'N/A'}
@@ -430,14 +502,17 @@ const ChatMonitoring: React.FC = () => {
                 width: (() => {
                   const aiMsgs = messages.filter((m) => m.role === 'ai' && m.ai_confidence)
                   if (aiMsgs.length === 0) return '0%'
-                  const avg = aiMsgs.reduce((s, m) => s + (m.ai_confidence || 0), 0) / aiMsgs.length
+                  const avg =
+                    aiMsgs.reduce((s, m) => s + (m.ai_confidence || 0), 0) / aiMsgs.length
                   return `${Math.round(avg * 100)}%`
                 })(),
               }}
             />
           </div>
           <div className="flex items-center gap-xs">
-            <span className="material-symbols-outlined text-[16px] text-emerald-500">verified</span>
+            <span className="material-symbols-outlined text-[16px] text-emerald-500">
+              verified
+            </span>
             <span className="text-body-md text-on-surface-variant">Avg dari semua pesan AI</span>
           </div>
         </div>
@@ -460,7 +535,7 @@ const ChatMonitoring: React.FC = () => {
             </div>
           </div>
           <div className="p-xs bg-surface-container rounded font-mono-label text-[10px] text-outline truncate">
-            n8n.srv1696073.hstgr.cloud
+            {n8nService.getBaseUrl()}
           </div>
           <div className="flex items-center justify-between mt-sm">
             <div className="flex items-center gap-xs">
@@ -493,7 +568,7 @@ const ChatMonitoring: React.FC = () => {
                 <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
                   Phone / ID
                 </span>
-                <p className="text-body-md font-mono-label">{selectedConv.id}</p>
+                <p className="text-body-md font-mono-label break-all">{selectedConv.id}</p>
               </div>
               <div>
                 <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
@@ -530,8 +605,11 @@ const ChatMonitoring: React.FC = () => {
                 </span>
                 <p className="text-body-md">
                   {new Date(selectedConv.last_message_at).toLocaleString('id-ID', {
-                    day: 'numeric', month: 'short', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit',
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
                   })}
                 </p>
               </div>
