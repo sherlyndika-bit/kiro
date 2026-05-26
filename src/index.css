@@ -17,18 +17,21 @@
 
 /* Default scrollbar — tipis, tidak mengganggu */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #e0e3e5;
+  background: #c6c6cd;
   border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #c6c6cd;
+  background: #76777d;
+  background-clip: content-box;
 }
 
 /* ─── Custom Scrollbar — Anatomi Lengkap ─── *
@@ -57,44 +60,52 @@
  *  └────────────────────────────┘
  */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;   /* lebar rel vertikal */
-  height: 6px;  /* tinggi rel horizontal */
+  width: 10px;   /* lebar rel vertikal — cukup tegas */
+  height: 10px;  /* tinggi rel horizontal */
 }
 
 /* Track — jalur kosong di belakang thumb */
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: #f1f3f5;          /* warna jalur */
-  border-radius: 10px;          /* sudut membulat */
-  margin: 4px 0;                /* jarak atas-bawah supaya tidak mentok */
+  background: #eceef0;          /* warna jalur sedikit lebih kontras */
+  border-radius: 10px;
+  margin: 6px 2px;              /* jarak supaya tidak mentok ke edge */
 }
 
 /* Thumb — kotak yang bisa di-drag */
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #c9cdd2;          /* warna thumb normal */
-  border-radius: 10px;          /* sudut membulat */
-  border: 1px solid #f1f3f5;    /* border tipis agar ada "gap" visual ke track */
-  min-height: 32px;             /* panjang minimum thumb agar mudah di-klik */
+  background: #76777d;          /* warna thumb sengaja lebih gelap supaya keliatan */
+  border-radius: 10px;
+  border: 2px solid #eceef0;    /* gap visual antara thumb & track */
+  background-clip: content-box;
+  min-height: 40px;             /* panjang minimum thumb agar mudah di-klik */
 }
 
 /* Thumb saat di-hover */
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #9ea5ad;          /* lebih gelap saat hover */
+  background: #45464d;
+  background-clip: content-box;
 }
 
 /* Thumb saat aktif / sedang di-drag */
 .custom-scrollbar::-webkit-scrollbar-thumb:active {
-  background: #6c757d;          /* paling gelap saat drag */
+  background: #191c1e;
+  background-clip: content-box;
 }
 
 /* Corner — pojok antara scrollbar vertikal + horizontal */
 .custom-scrollbar::-webkit-scrollbar-corner {
-  background: #f1f3f5;          /* samakan dengan track */
+  background: #eceef0;
 }
 
 /* Firefox fallback (tidak support pseudo-element, pakai property) */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #c9cdd2 #f1f3f5; /* thumb track */
+  scrollbar-color: #76777d #eceef0; /* thumb track */
+}
+
+/* Scroll-smooth utility (ada di Tailwind tapi explicit di sini biar pasti) */
+.scroll-smooth {
+  scroll-behavior: smooth;
 }
 
 .glass-card {

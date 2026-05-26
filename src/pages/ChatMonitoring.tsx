@@ -317,7 +317,7 @@ const ChatMonitoring: React.FC = () => {
             </div>
 
             {/* Messages */}
-            <div className="custom-scrollbar flex-1 p-md md:p-gutter overflow-y-auto flex flex-col gap-md md:gap-lg bg-background/30 min-h-0">
+            <div className="custom-scrollbar scroll-smooth flex-1 p-md md:p-gutter overflow-y-scroll flex flex-col gap-md md:gap-lg bg-background/30 min-h-0">
               {messages.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center text-outline">
                   <div className="text-center">
@@ -329,12 +329,12 @@ const ChatMonitoring: React.FC = () => {
                 messages.map((msg) => (
                   <div
                     key={msg.id}
-                    className={`flex flex-col max-w-[85%] md:max-w-[80%] ${
+                    className={`flex flex-col max-w-[85%] md:max-w-[75%] ${
                       msg.role === 'client' ? 'items-start' : 'items-end self-end'
                     }`}
                   >
                     <div
-                      className={`px-md py-3 rounded-xl shadow-sm relative overflow-hidden ${
+                      className={`px-md py-3 rounded-xl shadow-sm relative ${
                         msg.role === 'client'
                           ? 'bg-white border border-outline-variant rounded-tl-none'
                           : msg.role === 'ai'
