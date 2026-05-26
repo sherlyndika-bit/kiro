@@ -184,7 +184,7 @@ const ChatMonitoring: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="flex-1 overflow-y-scroll custom-scrollbar">
           {loading ? (
             <div className="p-md space-y-sm">
               {[1, 2, 3, 4].map((i) => (
@@ -430,7 +430,7 @@ const ChatMonitoring: React.FC = () => {
 
       {/* Column 3: Control Panel */}
       <section
-        className={`${panelVisibility} w-full lg:w-80 bg-background border-l border-outline-variant p-md lg:p-gutter flex-col gap-md overflow-y-auto custom-scrollbar flex-shrink-0 min-h-0`}
+        className={`${panelVisibility} w-full lg:w-80 bg-background border-l border-outline-variant p-md lg:p-gutter flex-col gap-md overflow-y-scroll custom-scrollbar flex-shrink-0 min-h-0`}
       >
         {/* Mobile header with back */}
         <div className="flex items-center justify-between lg:hidden mb-sm">
