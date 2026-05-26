@@ -96,25 +96,36 @@ function App() {
   const isFullscreenPage = currentPage === 'chat-monitoring'
 
   return (
-    <div className="min-h-screen bg-background text-on-background">
+    // Outer wrapper: lock ke viewport, no global scroll
+    <div className="h-full bg-background text-on-background overflow-hidden">
       <Sidebar
         currentPage={currentPage}
         onPageChange={setCurrentPage}
         isMobileOpen={isSidebarOpen}
         onMobileClose={() => setIsSidebarOpen(false)}
       />
-      <main className="md:ml-[280px] min-h-screen flex flex-col">
+      {/* Main column: TopBar + halaman aktif. h-full + flex-col + min-h-0 = chain
+          height constraint sampai ke halaman → halaman tidak pernah lebih
+          tinggi dari viewport, jadi tidak ada page-level scroll. */}
+      <main className="md:ml-[280px] h-full flex flex-col min-h-0">
         <TopBar
           title={pageTitles[currentPage]}
           onMobileMenuClick={() => setIsSidebarOpen(true)}
         />
-        <PageErrorBoundary pageKey={currentPage}>
-          {isFullscreenPage ? (
-            renderPage()
-          ) : (
-            <div className="flex-1 overflow-y-auto">{renderPage()}</div>
-          )}
-        </PageErrorBoundary>
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <PageErrorBoundary pageKey={currentPage}>
+            {isFullscreenPage ? (
+              // ChatMonitoring fills h-full, scroll terjadi DI DALAM kolom-nya
+              <div className="h-full">{renderPage()}</div>
+            ) : (
+              // Halaman biasa (Dashboard, Pipeline, dll) bisa scroll vertikal
+              // di dalam wrapper ini — tidak ke page-level
+              <div className="h-full overflow-y-auto custom-scrollbar">
+                {renderPage()}
+              </div>
+            )}
+          </PageErrorBoundary>
+        </div>
       </main>
     </div>
   )
