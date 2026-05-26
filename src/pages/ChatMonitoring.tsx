@@ -21,7 +21,16 @@ const ChatMonitoring: React.FC = () => {
   const [loading, setLoading] = useState(true)
   // Mobile view stack: list → chat → panel
   const [mobileView, setMobileView] = useState<MobileView>('list')
+
+  // Smart auto-scroll state
+  // - shouldAutoScroll: true kalau user lagi posisi di bottom (atau dekat bottom)
+  // - unseenCount: berapa pesan baru yang belum di-lihat saat user scroll up
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+  const [unseenCount, setUnseenCount] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const prevMessageCountRef = useRef(0)
+  const prevSelectedIdRef = useRef<string | null>(null)
 
   const selectedConv = conversations.find((c) => c.id === selectedId) || null
   const convPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -49,9 +58,53 @@ const ChatMonitoring: React.FC = () => {
     }
   }, [selectedId])
 
+  // Smart scroll handler — detect kalau user lagi di bottom (threshold 80px)
+  const handleMessagesScroll = () => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight
+    const isNearBottom = distanceFromBottom < 80
+    setShouldAutoScroll(isNearBottom)
+    if (isNearBottom) setUnseenCount(0)
+  }
+
+  // Scroll ke bottom paksa (dipanggil saat user click tombol "↓ pesan baru")
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    setShouldAutoScroll(true)
+    setUnseenCount(0)
+  }
+
+  // Smart auto-scroll: hanya scroll kalau ada pesan BARU dan user di bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    // Conversation switch — selalu scroll ke bottom (initial view, no animation)
+    if (prevSelectedIdRef.current !== selectedId) {
+      prevSelectedIdRef.current = selectedId
+      prevMessageCountRef.current = messages.length
+      setShouldAutoScroll(true)
+      setUnseenCount(0)
+      // Wait for DOM layout settle
+      const t = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
+      }, 50)
+      return () => clearTimeout(t)
+    }
+
+    // Pesan baru muncul (count meningkat dari polling/realtime)
+    if (messages.length > prevMessageCountRef.current) {
+      const newCount = messages.length - prevMessageCountRef.current
+      if (shouldAutoScroll) {
+        // User di bottom — auto-scroll ke pesan baru
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      } else {
+        // User scroll up — JANGAN ganggu, tampilkan badge "X pesan baru"
+        setUnseenCount((prev) => prev + newCount)
+      }
+      prevMessageCountRef.current = messages.length
+    }
+    // Length sama (polling refresh dengan data identik) → ga ngapa-ngapain
+  }, [messages, selectedId, shouldAutoScroll])
 
   const loadConversations = async () => {
     const data = await ConversationService.getAll()
@@ -255,7 +308,7 @@ const ChatMonitoring: React.FC = () => {
 
       {/* Column 2: Chat Window */}
       <section
-        className={`${chatVisibility} flex-1 flex-col bg-white min-w-0 min-h-0`}
+        className={`${chatVisibility} flex-1 flex-col bg-white min-w-0 min-h-0 relative`}
       >
         {selectedConv ? (
           <>
@@ -316,7 +369,11 @@ const ChatMonitoring: React.FC = () => {
             </div>
 
             {/* Messages */}
-            <div className="custom-scrollbar scroll-smooth flex-1 p-md md:p-gutter overflow-y-scroll flex flex-col gap-md md:gap-lg bg-background/30 min-h-0">
+            <div
+              ref={messagesContainerRef}
+              onScroll={handleMessagesScroll}
+              className="custom-scrollbar scroll-smooth flex-1 p-md md:p-gutter overflow-y-scroll flex flex-col gap-md md:gap-lg bg-background/30 min-h-0 relative"
+            >
               {messages.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center text-outline">
                   <div className="text-center">
@@ -359,6 +416,21 @@ const ChatMonitoring: React.FC = () => {
               )}
               <div ref={messagesEndRef} />
             </div>
+
+            {/* Floating "↓ pesan baru" button — muncul kalau user scroll up
+                dan ada pesan baru yang belum dilihat */}
+            {!shouldAutoScroll && unseenCount > 0 && (
+              <button
+                onClick={scrollToBottom}
+                className="absolute bottom-24 left-1/2 -translate-x-1/2 z-10 flex items-center gap-xs px-md py-2 bg-primary text-on-primary rounded-full shadow-lg hover:opacity-90 active:scale-95 transition-all animate-scale-up"
+                aria-label={`Scroll ke pesan terbaru (${unseenCount} pesan baru)`}
+              >
+                <span className="material-symbols-outlined text-[18px]">arrow_downward</span>
+                <span className="text-label-caps font-bold uppercase">
+                  {unseenCount} pesan baru
+                </span>
+              </button>
+            )}
 
             {/* Input */}
             <div className="p-md border-t border-outline-variant bg-white flex-shrink-0">
