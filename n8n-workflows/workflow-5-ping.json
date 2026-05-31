@@ -18,7 +18,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"ok\",\n  \"service\": \"sudut-ruang-n8n\",\n  \"timestamp\": \"{{ $now.toISO() }}\",\n  \"workflows\": {\n    \"WF1_incoming\": \"active\",\n    \"WF2_estimator\": \"active\",\n    \"WF3_proposal\": \"active\",\n    \"WF4_supabase_sync\": \"active\",\n    \"WF0_dashboard_message\": \"active\",\n    \"toggle_mode\": \"active\"\n  }\n}",
+        "responseBody": "={\n  \"status\": \"ok\",\n  \"service\": \"sudut-ruang-n8n\",\n  \"timestamp\": \"{{ $now.toISO() }}\"\n}",
         "options": {
           "responseCode": 200,
           "responseHeaders": {
