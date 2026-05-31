@@ -52,7 +52,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://wbfqudrzwsnlzevxjlkm.supabase.co/rest/v1/conversations",
+        "url": "https://wbfqudrzwsnlzevxjlkm.supabase.co/rest/v1/conversations?on_conflict=id",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,

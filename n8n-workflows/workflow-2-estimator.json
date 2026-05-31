@@ -57,7 +57,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://wbfqudrzwsnlzevxjlkm.supabase.co/rest/v1/clients",
+        "url": "https://wbfqudrzwsnlzevxjlkm.supabase.co/rest/v1/clients?on_conflict=id",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
