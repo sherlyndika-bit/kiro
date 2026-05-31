@@ -25,7 +25,14 @@ const avatarColor = (seed: string) => {
   return avatarPalette[h % avatarPalette.length]
 }
 
-const ChatMonitoring: React.FC = () => {
+interface ChatMonitoringProps {
+  /** Optional search term seeded from the TopBar search box */
+  initialSearch?: string
+  /** Increments whenever the TopBar search is submitted, to re-apply the seed */
+  searchNonce?: number
+}
+
+const ChatMonitoring: React.FC<ChatMonitoringProps> = ({ initialSearch, searchNonce }) => {
   const [conversations, setConversations] = useState<DBConversation[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [messages, setMessages] = useState<DBMessage[]>([])
@@ -59,6 +66,13 @@ const ChatMonitoring: React.FC = () => {
       if (convPollRef.current) clearInterval(convPollRef.current)
     }
   }, [])
+
+  // Seed the conversation search from the TopBar (re-applies on each submit)
+  useEffect(() => {
+    if (searchNonce && searchNonce > 0) {
+      setSearch(initialSearch || '')
+    }
+  }, [searchNonce])
 
   useEffect(() => {
     if (selectedId) {
