@@ -32,6 +32,11 @@ export interface ProposalSummaryCard {
   body: string
 }
 
+export interface ProposalImage {
+  src: string // data URL or remote URL
+  caption?: string
+}
+
 export interface ProposalData {
   proposalNo: string
   dateLabel: string
@@ -43,6 +48,15 @@ export interface ProposalData {
   metaSmall: string
   currency: Currency
   taxRate: number // e.g. 0.11
+  // Visual / image sections (all optional)
+  coverImage?: string // hero image data URL behind the cover
+  aboutTitle?: string
+  aboutBody?: string
+  gallery: ProposalImage[] // portfolio / render gallery
+  galleryTitle?: string
+  moodboard: ProposalImage[] // material / moodboard references
+  moodboardTitle?: string
+  // Content sections
   summaryTitle: string
   summaryCards: ProposalSummaryCard[]
   paletteTitle: string
@@ -53,6 +67,7 @@ export interface ProposalData {
   pricingTitle: string
   lineItems: ProposalLineItem[]
   notes: string
+  closingNote?: string
   company: { name: string; locations: string; phone: string; logo: string }
 }
 
@@ -217,6 +232,55 @@ export function buildProposalHTML(data: ProposalData): string {
     ? `${esc(data.projectTitle)} <strong>${esc(data.projectTitleAccent)}</strong>`
     : esc(data.projectTitle)
 
+  // Image sections
+  const coverStyle = data.coverImage
+    ? ` style="background-image:linear-gradient(to bottom, rgba(15,35,24,0.15), rgba(15,35,24,0.78)), url('${esc(
+        data.coverImage,
+      )}');background-size:cover;background-position:center;color:#fff;"`
+    : ''
+
+  const aboutSection =
+    data.aboutBody || data.aboutTitle
+      ? `
+    <section class="page-break">
+      <div class="section-tag">Tentang Kami</div>
+      <h2>${esc(data.aboutTitle || 'Tentang Studio')}</h2>
+      <p style="font-size:15px;line-height:1.7;color:#444;">${escMultiline(data.aboutBody || '')}</p>
+    </section>`
+      : ''
+
+  const galleryHtml = (items: ProposalImage[], title: string, tag: string) =>
+    items.length > 0
+      ? `
+    <section class="page-break">
+      <div class="section-tag">${esc(tag)}</div>
+      <h2>${esc(title)}</h2>
+      <div class="gallery-grid">
+        ${items
+          .map(
+            (img) => `
+        <figure class="gallery-item">
+          <img src="${esc(img.src)}" alt="${esc(img.caption || '')}" loading="lazy" />
+          ${img.caption ? `<figcaption>${esc(img.caption)}</figcaption>` : ''}
+        </figure>`,
+          )
+          .join('')}
+      </div>
+    </section>`
+      : ''
+
+  const gallerySection = galleryHtml(data.gallery, data.galleryTitle || 'Portofolio & Referensi Desain', 'Portofolio')
+  const moodboardSection = galleryHtml(data.moodboard, data.moodboardTitle || 'Moodboard & Material', 'Moodboard')
+
+  const closingSection = data.closingNote
+    ? `
+    <section>
+      <div class="section-tag">Penutup</div>
+      <h2>Terima Kasih</h2>
+      <p style="font-size:15px;line-height:1.7;color:#444;">${escMultiline(data.closingNote)}</p>
+    </section>`
+    : ''
+
   return `<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -277,16 +341,31 @@ export function buildProposalHTML(data: ProposalData): string {
   .calculation-box { background: var(--bg-light); border-radius: 6px; padding: 25px; margin-top: 30px; margin-left: auto; width: 100%; max-width: 400px; }
   .calc-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; }
   .calc-row.total { border-top: 1px solid #dcd9cd; padding-top: 15px; font-size: 18px; font-weight: bold; color: var(--primary-color); }
+  /* Cover hero */
+  .cover-hero { border-radius: 10px; padding: 56px 40px; margin-bottom: 50px; }
+  .cover-hero .confidential { color: rgba(255,255,255,0.8); }
+  .cover-hero .main-title { color: #fff; }
+  .cover-hero .main-title strong { color: #8fd6bd; }
+  .cover-hero .subtitle { color: #f0e6d8; }
+  .cover-hero .meta-info { background: rgba(255,255,255,0.12); border-left-color: #8fd6bd; color: #fff; backdrop-filter: blur(2px); }
+  /* Image galleries */
+  .gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 20px; }
+  .gallery-item { margin: 0; border-radius: 8px; overflow: hidden; border: 1px solid #e8e8e8; background: #fafafa; }
+  .gallery-item img { width: 100%; height: 200px; object-fit: cover; display: block; }
+  .gallery-item figcaption { padding: 10px 14px; font-size: 13px; color: var(--text-muted); }
   footer { margin-top: 80px; border-top: 1px solid #eeeeee; padding-top: 20px; font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
   @media print {
     body { background: #fff; padding: 0; }
     .proposal-paper { box-shadow: none; padding: 32px; max-width: none; }
+    .page-break { break-before: page; page-break-before: always; }
+    .gallery-item, .card, .color-swatch { break-inside: avoid; page-break-inside: avoid; }
+    .gallery-item img { height: 240px; }
   }
 </style>
 </head>
 <body>
   <div class="proposal-paper" data-proposal-no="${esc(data.proposalNo)}">
-    <header>
+    <header class="${data.coverImage ? 'cover-hero' : ''}"${coverStyle}>
       ${logoBlock}
       <div class="confidential">${esc(data.confidentialNote)}</div>
       <h1 class="main-title">${titleHtml}</h1>
@@ -298,10 +377,14 @@ export function buildProposalHTML(data: ProposalData): string {
         <br><small>No. Proposal: ${esc(data.proposalNo)}</small>
       </div>
     </header>
+    ${aboutSection}
     ${summarySection}
+    ${gallerySection}
+    ${moodboardSection}
     ${paletteSection}
     ${timelineSection}
     ${pricingSection}
+    ${closingSection}
     <footer>
       <div><strong>${esc(data.company.name)}</strong>${data.company.locations ? ` • ${esc(data.company.locations)}` : ''}</div>
       ${data.company.phone ? `<div>Hubungi: ${esc(data.company.phone)}</div>` : ''}

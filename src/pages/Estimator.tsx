@@ -13,6 +13,54 @@ import { n8nService } from '../services/n8nWebhookService'
 import ProposalPreviewModal from '../components/ProposalPreviewModal'
 import { ProposalData, defaultTimeline } from '../services/proposalTemplate'
 
+interface ImageEditorProps {
+  label: string
+  items: { src: string; caption: string }[]
+  onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onCaption: (index: number, value: string) => void
+  onRemove: (index: number) => void
+}
+
+const ImageEditor: React.FC<ImageEditorProps> = ({ label, items, onUpload, onCaption, onRemove }) => (
+  <div>
+    <div className="flex items-center justify-between mb-2">
+      <label className="text-[11px] font-semibold text-outline uppercase tracking-wide">{label}</label>
+      <label className="py-1.5 px-3 border border-outline-variant rounded-lg text-[12px] font-bold hover:bg-surface-container cursor-pointer flex items-center gap-xs">
+        <span className="material-symbols-outlined text-[16px]">add_photo_alternate</span>
+        Tambah Foto
+        <input type="file" accept="image/*" multiple onChange={onUpload} className="hidden" />
+      </label>
+    </div>
+    {items.length === 0 ? (
+      <p className="text-[12px] text-outline">Belum ada foto. Maks 12 foto, dikompres otomatis.</p>
+    ) : (
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-sm">
+        {items.map((img, i) => (
+          <div key={i} className="border border-outline-variant rounded-lg overflow-hidden bg-surface-container-low">
+            <div className="relative">
+              <img src={img.src} alt="" className="w-full h-24 object-cover" />
+              <button
+                onClick={() => onRemove(i)}
+                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-brand-dark/70 text-white flex items-center justify-center hover:bg-error"
+                aria-label="Hapus foto"
+              >
+                <span className="material-symbols-outlined text-[16px]">close</span>
+              </button>
+            </div>
+            <input
+              type="text"
+              value={img.caption}
+              onChange={(e) => onCaption(i, e.target.value)}
+              placeholder="Keterangan..."
+              className="w-full px-2 py-1.5 bg-transparent border-t border-outline-variant text-[12px] outline-none"
+            />
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+)
+
 const Estimator: React.FC = () => {
   // Step 1: RAB Konstruksi
   const [constructionId, setConstructionId] = useState(constructionRates[1].id) // default Rumah Standar
@@ -39,6 +87,17 @@ const Estimator: React.FC = () => {
   const [showProposal, setShowProposal] = useState(false)
   const [savingProposal, setSavingProposal] = useState(false)
   const [savedProposal, setSavedProposal] = useState(false)
+  // Proposal visual content (editable, optional images)
+  const [showProposalEditor, setShowProposalEditor] = useState(false)
+  const [coverImage, setCoverImage] = useState('')
+  const [aboutBody, setAboutBody] = useState(
+    'Sudut Ruang Archineering adalah studio arsitektur, interior, dan lansekap yang menghadirkan desain fungsional dengan karakter kuat. Kami mendampingi klien dari konsep hingga dokumentasi konstruksi.',
+  )
+  const [gallery, setGallery] = useState<{ src: string; caption: string }[]>([])
+  const [moodboard, setMoodboard] = useState<{ src: string; caption: string }[]>([])
+  const [closingNote, setClosingNote] = useState(
+    'Terima kasih atas kepercayaan Anda. Kami siap berdiskusi lebih lanjut untuk mewujudkan ruang impian Anda.',
+  )
   const [company, setCompany] = useState({
     name: 'Sudut Ruang Arsitek',
     locations: 'Surabaya | Bali | IKN',
@@ -284,6 +343,13 @@ Mau kita buatkan proposal lengkap?`
       metaSmall: `Luas: ${area} m²${clientPhone ? ` | WA: ${clientPhone}` : ''} | Studio: ${company.name}`,
       currency: 'IDR',
       taxRate: 0.11,
+      coverImage: coverImage || undefined,
+      aboutTitle: 'Tentang Studio',
+      aboutBody: aboutBody.trim(),
+      gallery: gallery.filter((g) => g.src),
+      galleryTitle: 'Portofolio & Referensi Desain',
+      moodboard: moodboard.filter((m) => m.src),
+      moodboardTitle: 'Moodboard & Material',
       summaryTitle: 'Executive Summary',
       summaryCards: [
         {
@@ -317,6 +383,7 @@ Mau kita buatkan proposal lengkap?`
       ],
       notes:
         'Angka di atas merupakan estimasi awal dan dapat berubah setelah survey lokasi dan diskusi detail. Proposal berlaku 14 hari sejak diterbitkan.',
+      closingNote: closingNote.trim() || undefined,
       company,
     }
   }
@@ -354,6 +421,57 @@ Mau kita buatkan proposal lengkap?`
     setSavingProposal(false)
     setSavedProposal(true)
     setTimeout(() => setSavedProposal(false), 3000)
+  }
+
+  // ── Image helpers (manual upload, compressed to keep size small) ──
+  const fileToCompressedDataUrl = (file: File, maxDim = 1280, quality = 0.82): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onerror = () => reject(new Error('read error'))
+      reader.onload = () => {
+        const img = new Image()
+        img.onerror = () => reject(new Error('image error'))
+        img.onload = () => {
+          let { width, height } = img
+          if (width > height && width > maxDim) {
+            height = Math.round((height * maxDim) / width)
+            width = maxDim
+          } else if (height > maxDim) {
+            width = Math.round((width * maxDim) / height)
+            height = maxDim
+          }
+          const canvas = document.createElement('canvas')
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+          if (!ctx) return resolve(String(reader.result))
+          ctx.drawImage(img, 0, 0, width, height)
+          resolve(canvas.toDataURL('image/jpeg', quality))
+        }
+        img.src = String(reader.result)
+      }
+      reader.readAsDataURL(file)
+    })
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !file.type.startsWith('image/')) return
+    setCoverImage(await fileToCompressedDataUrl(file, 1600, 0.8))
+  }
+
+  const handleGalleryUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    setter: React.Dispatch<React.SetStateAction<{ src: string; caption: string }[]>>,
+  ) => {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    const imgs = files.filter((f) => f.type.startsWith('image/'))
+    const out: { src: string; caption: string }[] = []
+    for (const f of imgs) {
+      out.push({ src: await fileToCompressedDataUrl(f), caption: '' })
+    }
+    setter((prev) => [...prev, ...out].slice(0, 12))
   }
 
   return (
@@ -641,6 +759,108 @@ Mau kita buatkan proposal lengkap?`
           </div>
         </div>
       </div>
+
+      {/* Proposal Visual Content Editor */}
+      {rab && fee && (
+        <div className="bg-surface border border-outline-variant rounded-2xl overflow-hidden">
+          <button
+            onClick={() => setShowProposalEditor((s) => !s)}
+            className="w-full flex items-center justify-between px-md py-sm hover:bg-surface-container-low transition-colors"
+          >
+            <div className="flex items-center gap-sm">
+              <span className="material-symbols-outlined text-brand-mid">photo_library</span>
+              <div className="text-left">
+                <h3 className="text-[15px] font-semibold">Konten Visual Proposal</h3>
+                <p className="text-[12px] text-outline">
+                  Cover, tentang studio, foto portofolio, moodboard{gallery.length + moodboard.length > 0 ? ` · ${gallery.length + moodboard.length} foto` : ''}
+                </p>
+              </div>
+            </div>
+            <span className="material-symbols-outlined text-outline">
+              {showProposalEditor ? 'expand_less' : 'expand_more'}
+            </span>
+          </button>
+
+          {showProposalEditor && (
+            <div className="px-md pb-md space-y-md border-t border-outline-variant pt-md">
+              {/* Cover */}
+              <div>
+                <label className="text-[11px] font-semibold text-outline uppercase tracking-wide block mb-2">
+                  Foto Cover (hero)
+                </label>
+                <div className="flex items-center gap-md">
+                  <div className="w-28 h-16 rounded-lg bg-surface-container border border-outline-variant overflow-hidden flex items-center justify-center flex-shrink-0">
+                    {coverImage ? (
+                      <img src={coverImage} alt="Cover" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="material-symbols-outlined text-outline">image</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-sm">
+                    <label className="py-2 px-md bg-brand text-white rounded-lg text-[13px] font-bold hover:opacity-90 cursor-pointer flex items-center gap-xs">
+                      <span className="material-symbols-outlined text-[18px]">upload</span>
+                      Unggah Cover
+                      <input type="file" accept="image/*" onChange={handleCoverUpload} className="hidden" />
+                    </label>
+                    {coverImage && (
+                      <button
+                        onClick={() => setCoverImage('')}
+                        className="py-2 px-md border border-outline-variant rounded-lg text-[13px] font-bold hover:bg-surface-container"
+                      >
+                        Hapus
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* About */}
+              <div>
+                <label className="text-[11px] font-semibold text-outline uppercase tracking-wide block mb-2">
+                  Tentang Studio
+                </label>
+                <textarea
+                  rows={3}
+                  value={aboutBody}
+                  onChange={(e) => setAboutBody(e.target.value)}
+                  className="w-full px-md py-3 bg-surface-container-low border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-brand-accent outline-none resize-none"
+                />
+              </div>
+
+              {/* Gallery */}
+              <ImageEditor
+                label="Portofolio / Render Desain"
+                items={gallery}
+                onUpload={(e) => handleGalleryUpload(e, setGallery)}
+                onCaption={(i, v) => setGallery((p) => p.map((it, idx) => (idx === i ? { ...it, caption: v } : it)))}
+                onRemove={(i) => setGallery((p) => p.filter((_, idx) => idx !== i))}
+              />
+
+              {/* Moodboard */}
+              <ImageEditor
+                label="Moodboard / Material"
+                items={moodboard}
+                onUpload={(e) => handleGalleryUpload(e, setMoodboard)}
+                onCaption={(i, v) => setMoodboard((p) => p.map((it, idx) => (idx === i ? { ...it, caption: v } : it)))}
+                onRemove={(i) => setMoodboard((p) => p.filter((_, idx) => idx !== i))}
+              />
+
+              {/* Closing */}
+              <div>
+                <label className="text-[11px] font-semibold text-outline uppercase tracking-wide block mb-2">
+                  Catatan Penutup
+                </label>
+                <textarea
+                  rows={2}
+                  value={closingNote}
+                  onChange={(e) => setClosingNote(e.target.value)}
+                  className="w-full px-md py-3 bg-surface-container-low border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-brand-accent outline-none resize-none"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Action Buttons */}
       {rab && fee && (
