@@ -23,6 +23,7 @@ const Estimator: React.FC = () => {
 
   // Optional client info
   const [clientName, setClientName] = useState('')
+  const [clientPhone, setClientPhone] = useState('')
   const [projectName, setProjectName] = useState('')
 
   // Action states
@@ -83,13 +84,17 @@ const Estimator: React.FC = () => {
   const handleSaveCRM = async () => {
     if (!rab) return
     setSavingCRM(true)
-    const clientId = clientName
-      ? clientName.replace(/\s+/g, '_').toLowerCase() + '_' + Date.now()
-      : `estimator_${Date.now()}`
+    const normalizedPhone = clientPhone.replace(/[^\d]/g, '')
+    const clientId =
+      normalizedPhone ||
+      (clientName
+        ? clientName.replace(/\s+/g, '_').toLowerCase() + '_' + Date.now()
+        : `estimator_${Date.now()}`)
 
     await ClientService.upsert({
       id: clientId,
       name: clientName || 'Klien Estimator',
+      phone: normalizedPhone || null,
       source: 'dashboard',
       status: 'estimasi',
       building_type: selectedConstruction?.type || null,
@@ -105,7 +110,7 @@ const Estimator: React.FC = () => {
     if (fee) {
       await DocumentService.insert({
         conversation_id: null,
-        client_phone: null,
+        client_phone: normalizedPhone || null,
         client_name: clientName || 'Klien Estimator',
         type: 'rab',
         status: 'draft',
@@ -135,13 +140,15 @@ const Estimator: React.FC = () => {
   }
 
   const handleSendWA = async () => {
-    if (!rab || !fee || !clientName) {
-      alert('Isi Nama Klien terlebih dahulu untuk kirim via WhatsApp')
+    if (!rab || !fee) return
+    const normalizedPhone = clientPhone.replace(/[^\d]/g, '')
+    if (!normalizedPhone) {
+      alert('Isi Nomor WhatsApp klien terlebih dahulu (contoh: 6281234567890).')
       return
     }
     setSendingWA(true)
 
-    const template = `Halo ${clientName}, ini estimasi kasarnya ya.
+    const template = `Halo ${clientName || 'Kak'}, ini estimasi kasarnya ya.
 
 Proyek: ${selectedConstruction?.type || ''} ${selectedConstruction?.tier || ''}
 Luas: ${area}m²
@@ -161,8 +168,8 @@ Ini masih estimasi awal ya, bisa berubah setelah survey dan diskusi detail.
 Mau kita buatkan proposal lengkap?`
 
     await n8nService.sendMessageToClient({
-      conversationId: clientName.replace(/\s+/g, '_').toLowerCase(),
-      clientPhoneOrUsername: clientName,
+      conversationId: normalizedPhone,
+      clientPhoneOrUsername: normalizedPhone,
       message: template,
       source: 'whatsapp',
       senderRole: 'ai',
@@ -177,12 +184,13 @@ Mau kita buatkan proposal lengkap?`
   const handleGeneratePDF = async () => {
     if (!rab || !fee) return
     setGeneratingPDF(true)
+    const normalizedPhone = clientPhone.replace(/[^\d]/g, '')
 
     // Simpan dokumen proposal ke Supabase sebagai draft lokal
     const proposalNo = `PROP-${Date.now()}`
     await DocumentService.insert({
       conversation_id: null,
-      client_phone: null,
+      client_phone: normalizedPhone || null,
       client_name: clientName || 'Klien',
       type: 'proposal',
       status: 'draft',
@@ -206,13 +214,12 @@ Mau kita buatkan proposal lengkap?`
       valid_until: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
     })
 
-    // Bila ada nama client, trigger n8n WF3 untuk generate PDF + kirim WA
+    // Bila ada nomor WA, trigger n8n WF3 untuk generate PDF + kirim WA
     let n8nMsg = ''
-    if (clientName) {
-      const phone = clientName.replace(/\s+/g, '_').toLowerCase()
+    if (normalizedPhone) {
       const result = await n8nService.triggerProposal({
-        from: phone,
-        clientName,
+        from: normalizedPhone,
+        clientName: clientName || 'Klien',
         extracted: {
           building_type: selectedConstruction?.type,
           tier: selectedConstruction?.tier,
@@ -232,22 +239,20 @@ Mau kita buatkan proposal lengkap?`
   }
 
   return (
-    <div className="p-gutter max-w-container-max space-y-md">
+    <div className="p-sm md:p-gutter max-w-container-max mx-auto space-y-md">
       {/* Header */}
       <div>
-        <h1 className="font-display-lg text-display-lg font-bold text-on-background">
-          AI Estimator
-        </h1>
+        <h1 className="font-serif-display text-display-lg text-on-background">AI Estimator</h1>
         <p className="text-body-md text-on-surface-variant">
           Kalkulator komprehensif: RAB Konstruksi + Fee Jasa Desain
         </p>
       </div>
 
       {/* Optional Client Info */}
-      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-sm">
+      <div className="bg-surface border border-outline-variant rounded-2xl p-md">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-sm">
           <div>
-            <label className="text-label-caps text-outline uppercase block mb-2">
+            <label className="text-[11px] font-semibold text-outline uppercase tracking-wide block mb-2">
               Nama Klien (opsional)
             </label>
             <input
@@ -255,11 +260,23 @@ Mau kita buatkan proposal lengkap?`
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
               placeholder="Contoh: Bpk. Budi"
-              className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md focus:ring-2 focus:ring-secondary outline-none"
+              className="w-full px-md py-3 bg-surface-container-low border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-brand-accent outline-none"
             />
           </div>
           <div>
-            <label className="text-label-caps text-outline uppercase block mb-2">
+            <label className="text-[11px] font-semibold text-outline uppercase tracking-wide block mb-2">
+              Nomor WhatsApp (opsional)
+            </label>
+            <input
+              type="tel"
+              value={clientPhone}
+              onChange={(e) => setClientPhone(e.target.value)}
+              placeholder="Contoh: 6281234567890"
+              className="w-full px-md py-3 bg-surface-container-low border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-brand-accent outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold text-outline uppercase tracking-wide block mb-2">
               Nama Proyek (opsional)
             </label>
             <input
@@ -267,7 +284,7 @@ Mau kita buatkan proposal lengkap?`
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
               placeholder="Contoh: Renovasi Apartemen Studio"
-              className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md focus:ring-2 focus:ring-secondary outline-none"
+              className="w-full px-md py-3 bg-surface-container-low border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-brand-accent outline-none"
             />
           </div>
         </div>

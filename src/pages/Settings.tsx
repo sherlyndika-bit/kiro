@@ -98,9 +98,9 @@ const Settings: React.FC = () => {
   ]
 
   return (
-    <div className="p-gutter space-y-md">
+    <div className="p-sm md:p-gutter space-y-md">
       <div>
-        <h1 className="font-display-lg text-display-lg font-bold text-on-background">Settings</h1>
+        <h1 className="font-serif-display text-display-lg text-on-background">Pengaturan</h1>
         <p className="text-body-md text-on-surface-variant">
           Kelola preferensi dan integrasi sistem
         </p>

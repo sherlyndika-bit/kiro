@@ -1,4 +1,4 @@
-import { useState, Component, ReactNode } from 'react'
+import { useState, useEffect, useRef, Component, ReactNode } from 'react'
 import Sidebar from './components/Sidebar'
 import TopBar from './components/TopBar'
 import Dashboard from './pages/Dashboard'
@@ -7,6 +7,7 @@ import Pipeline from './pages/Pipeline'
 import Estimator from './pages/Estimator'
 import AIStudio from './pages/AIStudio'
 import Settings from './pages/Settings'
+import { supabase } from './services/supabaseClient'
 
 type PageType =
   | 'dashboard'
@@ -17,12 +18,12 @@ type PageType =
   | 'settings'
 
 const pageTitles: Record<PageType, string> = {
-  dashboard: 'Agent Dashboard',
+  dashboard: 'Dashboard',
   'chat-monitoring': 'Active Chats',
-  pipeline: 'Client Database',
+  pipeline: 'Client CRM',
   estimator: 'AI Estimator',
   'ai-studio': 'AI Studio',
-  settings: 'Settings',
+  settings: 'Pengaturan',
 }
 
 // Error Boundary untuk catch crash per-page
@@ -51,9 +52,7 @@ class PageErrorBoundary extends Component<
         <div className="flex-1 flex items-center justify-center p-gutter">
           <div className="text-center max-w-md">
             <span className="material-symbols-outlined text-5xl text-error">error</span>
-            <h3 className="font-headline-sm text-headline-sm font-bold mt-md mb-sm">
-              Halaman gagal dimuat
-            </h3>
+            <h3 className="text-headline-sm font-bold mt-md mb-sm">Halaman gagal dimuat</h3>
             <p className="text-body-md text-on-surface-variant mb-md">{this.state.error}</p>
             <button
               onClick={() => this.setState({ hasError: false, error: '' })}
@@ -70,13 +69,31 @@ class PageErrorBoundary extends Component<
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<PageType>('chat-monitoring')
+  const [currentPage, setCurrentPage] = useState<PageType>('dashboard')
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [chatBadge, setChatBadge] = useState(0)
+  const badgePoll = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Lightweight poll for total unread conversations (sidebar badge)
+  useEffect(() => {
+    const loadBadge = async () => {
+      const { data } = await supabase
+        .from('conversations')
+        .select('unread_count')
+        .gt('unread_count', 0)
+      if (data) setChatBadge(data.length)
+    }
+    loadBadge()
+    badgePoll.current = setInterval(loadBadge, 8000)
+    return () => {
+      if (badgePoll.current) clearInterval(badgePoll.current)
+    }
+  }, [])
 
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard />
+        return <Dashboard onNavigate={setCurrentPage} />
       case 'chat-monitoring':
         return <ChatMonitoring />
       case 'pipeline':
@@ -88,41 +105,30 @@ function App() {
       case 'settings':
         return <Settings />
       default:
-        return <ChatMonitoring />
+        return <Dashboard onNavigate={setCurrentPage} />
     }
   }
 
-  // Chat Monitoring is fullscreen 3-column layout, others are scrollable
+  // Chat Monitoring is a fullscreen multi-column layout; others scroll vertically.
   const isFullscreenPage = currentPage === 'chat-monitoring'
 
   return (
-    // Outer wrapper: lock ke viewport, no global scroll
     <div className="h-full bg-background text-on-background overflow-hidden">
       <Sidebar
         currentPage={currentPage}
         onPageChange={setCurrentPage}
         isMobileOpen={isSidebarOpen}
         onMobileClose={() => setIsSidebarOpen(false)}
+        chatBadge={chatBadge}
       />
-      {/* Main column: TopBar + halaman aktif. h-full + flex-col + min-h-0 = chain
-          height constraint sampai ke halaman → halaman tidak pernah lebih
-          tinggi dari viewport, jadi tidak ada page-level scroll. */}
-      <main className="md:ml-[280px] h-full flex flex-col min-h-0">
-        <TopBar
-          title={pageTitles[currentPage]}
-          onMobileMenuClick={() => setIsSidebarOpen(true)}
-        />
+      <main className="md:ml-[264px] h-full flex flex-col min-h-0">
+        <TopBar title={pageTitles[currentPage]} onMobileMenuClick={() => setIsSidebarOpen(true)} />
         <div className="flex-1 min-h-0 overflow-hidden">
           <PageErrorBoundary pageKey={currentPage}>
             {isFullscreenPage ? (
-              // ChatMonitoring fills h-full, scroll terjadi DI DALAM kolom-nya
               <div className="h-full">{renderPage()}</div>
             ) : (
-              // Halaman biasa (Dashboard, Pipeline, dll) bisa scroll vertikal
-              // di dalam wrapper ini — tidak ke page-level
-              <div className="h-full overflow-y-auto custom-scrollbar">
-                {renderPage()}
-              </div>
+              <div className="h-full overflow-y-auto custom-scrollbar">{renderPage()}</div>
             )}
           </PageErrorBoundary>
         </div>
