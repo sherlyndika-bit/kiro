@@ -30,9 +30,18 @@ interface ChatMonitoringProps {
   initialSearch?: string
   /** Increments whenever the TopBar search is submitted, to re-apply the seed */
   searchNonce?: number
+  /** Conversation to open (from a notification click) */
+  targetConversationId?: string | null
+  /** Increments whenever a target conversation should be opened */
+  targetNonce?: number
 }
 
-const ChatMonitoring: React.FC<ChatMonitoringProps> = ({ initialSearch, searchNonce }) => {
+const ChatMonitoring: React.FC<ChatMonitoringProps> = ({
+  initialSearch,
+  searchNonce,
+  targetConversationId,
+  targetNonce,
+}) => {
   const [conversations, setConversations] = useState<DBConversation[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [messages, setMessages] = useState<DBMessage[]>([])
@@ -73,6 +82,15 @@ const ChatMonitoring: React.FC<ChatMonitoringProps> = ({ initialSearch, searchNo
       setSearch(initialSearch || '')
     }
   }, [searchNonce])
+
+  // Open a specific conversation when requested (e.g. from a notification)
+  useEffect(() => {
+    if (targetNonce && targetNonce > 0 && targetConversationId) {
+      setSelectedId(targetConversationId)
+      selectedIdRef.current = targetConversationId
+      setMobileView('chat')
+    }
+  }, [targetNonce])
 
   useEffect(() => {
     if (selectedId) {

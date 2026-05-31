@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, Component, ReactNode } from 'react'
 import Sidebar from './components/Sidebar'
 import TopBar from './components/TopBar'
+import NotificationToasts from './components/NotificationToasts'
 import Dashboard from './pages/Dashboard'
 import ChatMonitoring from './pages/ChatMonitoring'
 import Pipeline from './pages/Pipeline'
@@ -8,8 +9,10 @@ import Estimator from './pages/Estimator'
 import AIStudio from './pages/AIStudio'
 import Settings from './pages/Settings'
 import LoginPage from './pages/LoginPage'
-import { supabase } from './services/supabaseClient'
+import { supabase, AIConfigService } from './services/supabaseClient'
 import { authService } from './services/auth'
+import { playNotificationSound, primeAudio, showBrowserNotification } from './services/notify'
+import { AppNotification, ToastItem } from './types/notification'
 
 type PageType =
   | 'dashboard'
@@ -28,7 +31,6 @@ const pageTitles: Record<PageType, string> = {
   settings: 'Pengaturan',
 }
 
-// Error Boundary untuk catch crash per-page
 class PageErrorBoundary extends Component<
   { children: ReactNode; pageKey: string },
   { hasError: boolean; error: string }
@@ -75,26 +77,94 @@ function App() {
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard')
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [chatBadge, setChatBadge] = useState(0)
+  const [logo, setLogo] = useState<string>('')
+
+  // Search + conversation targeting for ChatMonitoring
   const [chatSearch, setChatSearch] = useState('')
   const [chatSearchNonce, setChatSearchNonce] = useState(0)
-  const badgePoll = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [chatTargetId, setChatTargetId] = useState<string | null>(null)
+  const [chatTargetNonce, setChatTargetNonce] = useState(0)
+
+  // Notifications
+  const [notifications, setNotifications] = useState<AppNotification[]>([])
+  const [toasts, setToasts] = useState<ToastItem[]>([])
+
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const seenRef = useRef<Map<string, string>>(new Map())
+  const notifInitRef = useRef(false)
+  const knownNotifIds = useRef<Set<string>>(new Set())
 
   const session = authService.getSession()
 
-  // Lightweight poll for total unread conversations (sidebar/topbar badge)
+  // Unlock audio + load logo on first authed render
   useEffect(() => {
     if (!authed) return
-    const loadBadge = async () => {
+    AIConfigService.get('company_logo').then((v) => v && setLogo(v))
+    const unlock = () => primeAudio()
+    window.addEventListener('pointerdown', unlock, { once: true })
+    window.addEventListener('keydown', unlock, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', unlock)
+      window.removeEventListener('keydown', unlock)
+    }
+  }, [authed])
+
+  const dismissToast = (id: string) => setToasts((ts) => ts.filter((t) => t.id !== id))
+
+  // Poll conversations: sidebar badge + new-message notifications
+  useEffect(() => {
+    if (!authed) return
+
+    const poll = async () => {
       const { data } = await supabase
         .from('conversations')
-        .select('unread_count')
-        .gt('unread_count', 0)
-      if (data) setChatBadge(data.length)
+        .select('id, client_name, last_message, last_message_at, unread_count')
+        .order('last_message_at', { ascending: false })
+        .limit(50)
+      if (!data) return
+
+      setChatBadge(data.filter((c) => (c.unread_count || 0) > 0).length)
+
+      const fresh: AppNotification[] = []
+      for (const c of data) {
+        const prev = seenRef.current.get(c.id)
+        const t: string = c.last_message_at || ''
+        if (notifInitRef.current) {
+          const isNew = prev === undefined || (t !== '' && t > prev)
+          const notifId = `${c.id}-${t}`
+          if (isNew && (c.unread_count || 0) > 0 && !knownNotifIds.current.has(notifId)) {
+            knownNotifIds.current.add(notifId)
+            fresh.push({
+              id: notifId,
+              conversationId: c.id,
+              title: c.client_name || 'Pelanggan',
+              body: c.last_message || 'Pesan baru masuk',
+              time: t || new Date().toISOString(),
+              read: false,
+            })
+          }
+        }
+        if (t) seenRef.current.set(c.id, t)
+      }
+
+      if (!notifInitRef.current) {
+        notifInitRef.current = true
+        return
+      }
+
+      if (fresh.length > 0) {
+        setNotifications((prev) => [...fresh, ...prev].slice(0, 50))
+        setToasts((prev) => [...prev, ...fresh.map((n) => ({ id: n.id, title: n.title, body: n.body }))])
+        playNotificationSound()
+        fresh.forEach((n) => showBrowserNotification(`Pesan baru — ${n.title}`, n.body))
+        fresh.forEach((n) => setTimeout(() => dismissToast(n.id), 6000))
+      }
     }
-    loadBadge()
-    badgePoll.current = setInterval(loadBadge, 8000)
+
+    poll()
+    pollRef.current = setInterval(poll, 5000)
     return () => {
-      if (badgePoll.current) clearInterval(badgePoll.current)
+      if (pollRef.current) clearInterval(pollRef.current)
     }
   }, [authed])
 
@@ -103,6 +173,11 @@ function App() {
     setAuthed(false)
     setCurrentPage('dashboard')
     setIsSidebarOpen(false)
+    setNotifications([])
+    setToasts([])
+    notifInitRef.current = false
+    seenRef.current.clear()
+    knownNotifIds.current.clear()
   }
 
   const handleTopbarSearch = (query: string) => {
@@ -110,6 +185,26 @@ function App() {
     setChatSearchNonce((n) => n + 1)
     setCurrentPage('chat-monitoring')
   }
+
+  const openConversation = (conversationId: string) => {
+    setChatTargetId(conversationId)
+    setChatTargetNonce((n) => n + 1)
+    setNotifications((prev) =>
+      prev.map((n) => (n.conversationId === conversationId ? { ...n, read: true } : n)),
+    )
+    setCurrentPage('chat-monitoring')
+  }
+
+  const handleToastClick = (toastId: string) => {
+    const notif = notifications.find((n) => n.id === toastId)
+    dismissToast(toastId)
+    if (notif) openConversation(notif.conversationId)
+  }
+
+  const markAllNotificationsRead = () =>
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+
+  const clearNotifications = () => setNotifications([])
 
   if (!authed) {
     return <LoginPage onSuccess={() => setAuthed(true)} />
@@ -120,7 +215,14 @@ function App() {
       case 'dashboard':
         return <Dashboard onNavigate={setCurrentPage} />
       case 'chat-monitoring':
-        return <ChatMonitoring initialSearch={chatSearch} searchNonce={chatSearchNonce} />
+        return (
+          <ChatMonitoring
+            initialSearch={chatSearch}
+            searchNonce={chatSearchNonce}
+            targetConversationId={chatTargetId}
+            targetNonce={chatTargetNonce}
+          />
+        )
       case 'pipeline':
         return <Pipeline />
       case 'estimator':
@@ -128,13 +230,12 @@ function App() {
       case 'ai-studio':
         return <AIStudio />
       case 'settings':
-        return <Settings />
+        return <Settings onLogoChange={setLogo} />
       default:
         return <Dashboard onNavigate={setCurrentPage} />
     }
   }
 
-  // Chat Monitoring is a fullscreen multi-column layout; others scroll vertically.
   const isFullscreenPage = currentPage === 'chat-monitoring'
 
   return (
@@ -147,14 +248,17 @@ function App() {
         chatBadge={chatBadge}
         userEmail={session?.email}
         onLogout={handleLogout}
+        logo={logo}
       />
       <main className="md:ml-[264px] h-full flex flex-col min-h-0">
         <TopBar
           title={pageTitles[currentPage]}
           onMobileMenuClick={() => setIsSidebarOpen(true)}
           onSearch={handleTopbarSearch}
-          onBell={() => setCurrentPage('chat-monitoring')}
-          chatBadge={chatBadge}
+          notifications={notifications}
+          onOpenConversation={openConversation}
+          onMarkAllRead={markAllNotificationsRead}
+          onClearNotifications={clearNotifications}
         />
         <div className="flex-1 min-h-0 overflow-hidden">
           <PageErrorBoundary pageKey={currentPage}>
@@ -166,6 +270,8 @@ function App() {
           </PageErrorBoundary>
         </div>
       </main>
+
+      <NotificationToasts toasts={toasts} onClick={handleToastClick} onDismiss={dismissToast} />
     </div>
   )
 }

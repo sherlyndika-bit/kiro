@@ -21,6 +21,8 @@ interface SidebarProps {
   userEmail?: string
   /** Logout handler */
   onLogout?: () => void
+  /** Optional company logo (data URL) */
+  logo?: string
 }
 
 interface MenuItem {
@@ -78,6 +80,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   chatBadge = 0,
   userEmail,
   onLogout,
+  logo,
 }) => {
   // Close drawer on Escape (mobile)
   useEffect(() => {
@@ -124,8 +127,12 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* Logo */}
         <div className="px-md py-md flex items-center justify-between border-b border-white/10">
           <div className="flex items-center gap-sm min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-brand-accent/15 border border-brand-accent/25 flex items-center justify-center flex-shrink-0">
-              <BrandMark />
+            <div className="w-9 h-9 rounded-xl bg-brand-accent/15 border border-brand-accent/25 flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {logo ? (
+                <img src={logo} alt="Logo" className="w-full h-full object-cover" />
+              ) : (
+                <BrandMark />
+              )}
             </div>
             <div className="min-w-0">
               <h1 className="font-serif-display text-[18px] text-white leading-none truncate">

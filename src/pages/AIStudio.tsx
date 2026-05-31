@@ -8,11 +8,18 @@ import {
   DBQuickReply,
   DBDocument,
 } from '../services/supabaseClient'
+import PinLock from '../components/PinLock'
 
 type Tab = 'templates' | 'quick-replies' | 'config' | 'documents'
 
-// Keys that hold secrets / lock state — never expose in the editable config list.
-const SENSITIVE_CONFIG_KEYS = ['settings_pin', 'dashboard_password_hash', 'dashboard_email']
+// Keys that hold secrets / branding blobs / lock state — never expose in the
+// editable config list.
+const SENSITIVE_CONFIG_KEYS = [
+  'settings_pin',
+  'dashboard_password_hash',
+  'dashboard_email',
+  'company_logo',
+]
 
 const AIStudio: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('templates')
@@ -30,6 +37,9 @@ const AIStudio: React.FC = () => {
   // Quick reply form
   const [editingQR, setEditingQR] = useState<Partial<DBQuickReply> | null>(null)
   const [savingQR, setSavingQR] = useState(false)
+
+  // AI Config tab lock
+  const [configLocked, setConfigLocked] = useState(true)
 
   useEffect(() => {
     loadAll()
@@ -370,10 +380,22 @@ const AIStudio: React.FC = () => {
           {/* AI CONFIG */}
           {activeTab === 'config' && (
             <div className="space-y-md">
-              <p className="text-body-md text-on-surface-variant">
-                Konfigurasi behavior AI Agent
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+              <div className="flex items-start gap-xs bg-amber-soft border border-amber/30 rounded-xl p-sm">
+                <span className="material-symbols-outlined text-amber text-[20px]">warning</span>
+                <p className="text-[12.5px] text-on-surface-variant">
+                  Mengubah konfigurasi ini bisa memengaruhi perilaku AI & integrasi. Buka kunci
+                  dengan PIN sebelum mengedit.
+                </p>
+              </div>
+
+              <PinLock
+                locked={configLocked}
+                onChange={setConfigLocked}
+                lockedTitle="AI Config terkunci"
+                lockedDesc="Masukkan PIN untuk mengedit konfigurasi AI."
+              />
+
+              <div className={`grid grid-cols-1 md:grid-cols-2 gap-md ${configLocked ? 'opacity-70' : ''}`}>
                 {Object.entries(aiConfig)
                   .filter(([key]) => !SENSITIVE_CONFIG_KEYS.includes(key))
                   .map(([key, value]) => (
@@ -383,12 +405,13 @@ const AIStudio: React.FC = () => {
                       <input
                         type="text"
                         defaultValue={value}
+                        disabled={configLocked}
                         onBlur={(e) => {
-                          if (e.target.value !== value) {
+                          if (!configLocked && e.target.value !== value) {
                             saveConfig(key, e.target.value)
                           }
                         }}
-                        className="flex-1 px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md focus:ring-2 focus:ring-secondary outline-none"
+                        className="flex-1 px-md py-3 bg-surface-container-low border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-brand-accent outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                       />
                     </div>
                     <p className="text-label-caps text-outline mt-1">Current: {value}</p>
