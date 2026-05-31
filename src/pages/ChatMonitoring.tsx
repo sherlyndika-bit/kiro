@@ -10,21 +10,35 @@ import { n8nService } from '../services/n8nWebhookService'
 
 type MobileView = 'list' | 'chat' | 'panel'
 
+const avatarPalette = [
+  'bg-brand-mid',
+  'bg-blue',
+  'bg-coral',
+  'bg-purple',
+  'bg-brand-accent',
+  'bg-amber',
+]
+
+const avatarColor = (seed: string) => {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return avatarPalette[h % avatarPalette.length]
+}
+
 const ChatMonitoring: React.FC = () => {
   const [conversations, setConversations] = useState<DBConversation[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [messages, setMessages] = useState<DBMessage[]>([])
   const [messageInput, setMessageInput] = useState('')
   const [filterSource, setFilterSource] = useState<'all' | 'whatsapp' | 'instagram'>('all')
+  const [search, setSearch] = useState('')
   const [quickReplies, setQuickReplies] = useState<DBQuickReply[]>([])
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [loading, setLoading] = useState(true)
-  // Mobile view stack: list → chat → panel
+  const [togglingMode, setTogglingMode] = useState(false)
   const [mobileView, setMobileView] = useState<MobileView>('list')
 
   // Smart auto-scroll state
-  // - shouldAutoScroll: true kalau user lagi posisi di bottom (atau dekat bottom)
-  // - unseenCount: berapa pesan baru yang belum di-lihat saat user scroll up
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const [unseenCount, setUnseenCount] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -58,7 +72,6 @@ const ChatMonitoring: React.FC = () => {
     }
   }, [selectedId])
 
-  // Smart scroll handler — detect kalau user lagi di bottom (threshold 80px)
   const handleMessagesScroll = () => {
     const container = messagesContainerRef.current
     if (!container) return
@@ -69,41 +82,33 @@ const ChatMonitoring: React.FC = () => {
     if (isNearBottom) setUnseenCount(0)
   }
 
-  // Scroll ke bottom paksa (dipanggil saat user click tombol "↓ pesan baru")
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
     setShouldAutoScroll(true)
     setUnseenCount(0)
   }
 
-  // Smart auto-scroll: hanya scroll kalau ada pesan BARU dan user di bottom
   useEffect(() => {
-    // Conversation switch — selalu scroll ke bottom (initial view, no animation)
     if (prevSelectedIdRef.current !== selectedId) {
       prevSelectedIdRef.current = selectedId
       prevMessageCountRef.current = messages.length
       setShouldAutoScroll(true)
       setUnseenCount(0)
-      // Wait for DOM layout settle
       const t = setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
       }, 50)
       return () => clearTimeout(t)
     }
 
-    // Pesan baru muncul (count meningkat dari polling/realtime)
     if (messages.length > prevMessageCountRef.current) {
       const newCount = messages.length - prevMessageCountRef.current
       if (shouldAutoScroll) {
-        // User di bottom — auto-scroll ke pesan baru
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
       } else {
-        // User scroll up — JANGAN ganggu, tampilkan badge "X pesan baru"
         setUnseenCount((prev) => prev + newCount)
       }
       prevMessageCountRef.current = messages.length
     }
-    // Length sama (polling refresh dengan data identik) → ga ngapa-ngapain
   }, [messages, selectedId, shouldAutoScroll])
 
   const loadConversations = async () => {
@@ -130,6 +135,10 @@ const ChatMonitoring: React.FC = () => {
     setSelectedId(id)
     selectedIdRef.current = id
     setMobileView('chat')
+    // Optimistically clear unread in local list
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)),
+    )
   }
 
   const handleSendMessage = async () => {
@@ -147,15 +156,14 @@ const ChatMonitoring: React.FC = () => {
     }
 
     setMessageInput('')
-    // Optimistic write ke Supabase, dashboard polling akan tampilkan otomatis
     await ConversationService.insertMessage(msg)
     await ConversationService.upsertConversation({
       id: selectedConv.id,
       last_message: text,
       last_message_at: new Date().toISOString(),
     })
+    loadMessages(selectedConv.id)
 
-    // Forward ke n8n WF0 → kirim ke WA / IG
     await n8nService.sendMessageToClient({
       conversationId: selectedConv.id,
       clientPhoneOrUsername: selectedConv.id,
@@ -167,19 +175,30 @@ const ChatMonitoring: React.FC = () => {
   }
 
   const handleToggleMode = async () => {
-    if (!selectedConv) return
+    if (!selectedConv || togglingMode) return
     const newMode = selectedConv.mode === 'ai' ? 'manual' : 'ai'
+    setTogglingMode(true)
+    // Optimistic update
+    setConversations((prev) =>
+      prev.map((c) => (c.id === selectedConv.id ? { ...c, mode: newMode } : c)),
+    )
     await ConversationService.toggleMode(selectedConv.id, newMode)
     await n8nService.toggleConversationMode({
       conversationId: selectedConv.id,
       newMode,
       triggeredBy: 'dashboard-operator',
     })
+    setTogglingMode(false)
   }
 
-  const filtered = conversations.filter((c) =>
-    filterSource === 'all' ? true : c.source === filterSource
-  )
+  const filtered = conversations
+    .filter((c) => (filterSource === 'all' ? true : c.source === filterSource))
+    .filter((c) =>
+      search.trim()
+        ? (c.client_name || '').toLowerCase().includes(search.toLowerCase()) ||
+          c.id.includes(search)
+        : true,
+    )
 
   const formatTime = (dateStr: string) => {
     const d = new Date(dateStr)
@@ -190,189 +209,236 @@ const ChatMonitoring: React.FC = () => {
     const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000)
     if (mins < 1) return 'baru'
     if (mins < 60) return `${mins}m`
-    return `${Math.floor(mins / 60)}j`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return `${hours}j`
+    return `${Math.floor(hours / 24)}h`
   }
 
-  // Visibility classes per view (mobile shows one column at a time)
-  // md+ shows all 3 columns side-by-side
-  const listVisibility =
-    mobileView === 'list' ? 'flex' : 'hidden md:flex'
-  const chatVisibility =
-    mobileView === 'chat' ? 'flex' : 'hidden md:flex'
-  const panelVisibility =
-    mobileView === 'panel' ? 'flex' : 'hidden lg:flex'
+  const meta = (selectedConv?.metadata || {}) as Record<string, string>
+  const projectType = meta.projectType || meta.buildingType
+  const estimatedValue = meta.estimatedValue
+
+  const listVisibility = mobileView === 'list' ? 'flex' : 'hidden md:flex'
+  const chatVisibility = mobileView === 'chat' ? 'flex' : 'hidden md:flex'
+  const panelVisibility = mobileView === 'panel' ? 'flex' : 'hidden xl:flex'
+
+  const aiConfidence = (() => {
+    const aiMsgs = messages.filter((m) => m.role === 'ai' && m.ai_confidence)
+    if (aiMsgs.length === 0) return null
+    const avg = aiMsgs.reduce((s, m) => s + (m.ai_confidence || 0), 0) / aiMsgs.length
+    return Math.round(avg * 100)
+  })()
 
   return (
-    // h-full = parent (App.tsx) sudah constrain ke viewport - TopBar.
-    // Tidak perlu inline calc(100vh - 64px) yang error di mobile karena URL bar.
-    <div className="flex h-full overflow-hidden">
-      {/* Column 1: Conversation List */}
+    <div className="flex h-full overflow-hidden bg-background">
+      {/* ── Column 1: Conversation List ───────────────────────── */}
       <section
-        className={`${listVisibility} w-full md:w-72 lg:w-80 border-r border-outline-variant bg-surface-container-lowest flex-col flex-shrink-0 min-h-0`}
+        className={`${listVisibility} w-full md:w-72 lg:w-80 border-r border-outline-variant bg-surface flex-col flex-shrink-0 min-h-0`}
       >
         <div className="p-md border-b border-outline-variant">
           <div className="flex items-center justify-between mb-sm">
-            <span className="font-label-caps text-label-caps text-outline uppercase">
-              Active Streams
-            </span>
-            <span className="font-mono-label text-mono-label bg-primary-container text-on-primary-container px-2 py-1 rounded">
-              {filtered.filter((c) => c.status === 'active').length} Online
+            <h3 className="text-[15px] font-semibold text-on-surface">Percakapan</h3>
+            <span className="text-[11px] font-semibold bg-brand-soft text-brand-mid px-2 py-0.5 rounded-full">
+              {conversations.filter((c) => c.status === 'active').length} online
             </span>
           </div>
+          {/* Search */}
+          <div className="flex items-center gap-xs bg-background border border-outline-variant rounded-full px-3 py-2 mb-sm">
+            <span className="material-symbols-outlined text-outline text-[18px]">search</span>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Cari nama / nomor..."
+              className="bg-transparent border-none outline-none text-[13px] w-full placeholder:text-outline"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} aria-label="Hapus pencarian">
+                <span className="material-symbols-outlined text-outline text-[18px]">close</span>
+              </button>
+            )}
+          </div>
+          {/* Source filter */}
           <div className="flex gap-1">
             {(['all', 'whatsapp', 'instagram'] as const).map((s) => (
               <button
                 key={s}
                 onClick={() => setFilterSource(s)}
-                className={`flex-1 py-1.5 px-2 rounded-lg text-label-caps font-bold uppercase transition-colors ${
+                className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold uppercase tracking-wide transition-colors ${
                   filterSource === s
-                    ? 'bg-primary text-on-primary'
+                    ? 'bg-brand text-white'
                     : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
                 }`}
               >
-                {s === 'all' ? `All (${conversations.length})` : s === 'whatsapp' ? 'WA' : 'IG'}
+                {s === 'all' ? `Semua (${conversations.length})` : s === 'whatsapp' ? 'WA' : 'IG'}
               </button>
             ))}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-scroll custom-scrollbar">
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
           {loading ? (
             <div className="p-md space-y-sm">
-              {[1, 2, 3, 4].map((i) => (
+              {[1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="h-16 bg-surface-container rounded-lg animate-pulse" />
               ))}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="p-md text-center text-outline">
-              <span className="material-symbols-outlined text-4xl">chat</span>
-              <p className="text-body-md mt-2">Belum ada percakapan</p>
-              <p className="text-label-caps mt-1 px-md">
-                Pesan dari WhatsApp/Instagram akan muncul di sini saat n8n WF1 aktif.
+            <div className="p-md text-center text-outline mt-lg">
+              <span className="material-symbols-outlined text-5xl">forum</span>
+              <p className="text-body-md mt-2 font-medium text-on-surface-variant">
+                {search || filterSource !== 'all' ? 'Tidak ada hasil' : 'Belum ada percakapan'}
+              </p>
+              <p className="text-[11px] mt-1 px-md">
+                Pesan WhatsApp/Instagram akan muncul di sini saat n8n WF1 aktif.
               </p>
             </div>
           ) : (
-            filtered.map((conv) => (
-              <div
-                key={conv.id}
-                onClick={() => handleSelectConversation(conv.id)}
-                className={`p-md border-b border-outline-variant cursor-pointer hover:bg-surface-container-low transition-colors ${
-                  selectedId === conv.id ? 'bg-surface-container border-l-4 border-l-primary' : ''
-                } ${conv.unread_count > 0 ? 'border-l-4 border-l-error' : ''}`}
-              >
-                <div className="flex items-start gap-sm">
-                  <div className="relative">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-fixed to-secondary-fixed flex items-center justify-center text-primary font-bold">
-                      {conv.client_name.charAt(0).toUpperCase()}
-                    </div>
+            filtered.map((conv) => {
+              const isSelected = selectedId === conv.id
+              return (
+                <button
+                  key={conv.id}
+                  onClick={() => handleSelectConversation(conv.id)}
+                  className={`w-full text-left px-md py-3 flex items-center gap-sm border-b border-outline-variant/60 transition-colors ${
+                    isSelected ? 'bg-brand-soft' : 'hover:bg-surface-container-low'
+                  }`}
+                >
+                  <div className="relative flex-shrink-0">
                     <div
-                      className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-bold text-white ${
-                        conv.source === 'whatsapp' ? 'bg-green-500' : 'bg-pink-500'
+                      className={`w-12 h-12 rounded-full ${avatarColor(
+                        conv.id,
+                      )} flex items-center justify-center text-white font-semibold text-[16px]`}
+                    >
+                      {(conv.client_name || '?').charAt(0).toUpperCase()}
+                    </div>
+                    <span
+                      className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-surface flex items-center justify-center text-[8px] font-bold text-white ${
+                        conv.source === 'whatsapp' ? 'bg-[#25D366]' : 'bg-[#E1306C]'
                       }`}
                     >
                       {conv.source === 'whatsapp' ? 'W' : 'I'}
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start">
-                      <span className="font-bold text-on-background text-[13px] truncate">
-                        {conv.client_name}
-                      </span>
-                      <span
-                        className={`text-label-caps text-[10px] ml-1 flex-shrink-0 ${
-                          conv.unread_count > 0 ? 'text-error font-bold' : 'text-outline'
-                        }`}
-                      >
-                        {conv.unread_count > 0 ? 'Baru' : formatTimeAgo(conv.last_message_at)}
-                      </span>
-                    </div>
-                    <p className="text-body-md text-on-surface-variant truncate text-[12px]">
-                      {conv.last_message || '—'}
-                    </p>
-                    <span
-                      className={`mt-1 inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        conv.mode === 'ai'
-                          ? 'bg-secondary-container text-on-secondary-container'
-                          : 'bg-error-container text-on-error-container'
-                      }`}
-                    >
-                      {conv.mode === 'ai' ? 'AI Handled' : 'Human Active'}
                     </span>
                   </div>
-                </div>
-              </div>
-            ))
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-on-surface text-[14px] truncate">
+                        {conv.client_name || 'Pelanggan'}
+                      </span>
+                      <span
+                        className={`text-[11px] flex-shrink-0 ${
+                          conv.unread_count > 0 && !isSelected
+                            ? 'text-brand-accent font-bold'
+                            : 'text-outline'
+                        }`}
+                      >
+                        {formatTimeAgo(conv.last_message_at)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                      <p className="text-[12.5px] text-on-surface-variant truncate">
+                        {conv.last_message || '—'}
+                      </p>
+                      {conv.unread_count > 0 && !isSelected ? (
+                        <span className="flex-shrink-0 bg-brand-accent text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center">
+                          {conv.unread_count}
+                        </span>
+                      ) : (
+                        <span
+                          className={`flex-shrink-0 w-2 h-2 rounded-full ${
+                            conv.mode === 'ai' ? 'bg-brand-accent' : 'bg-amber'
+                          }`}
+                          title={conv.mode === 'ai' ? 'AI aktif' : 'Ditangani manusia'}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </button>
+              )
+            })
           )}
         </div>
       </section>
 
-      {/* Column 2: Chat Window */}
-      <section
-        className={`${chatVisibility} flex-1 flex-col bg-white min-w-0 min-h-0 relative`}
-      >
+      {/* ── Column 2: Chat Thread ─────────────────────────────── */}
+      <section className={`${chatVisibility} flex-1 flex-col min-w-0 min-h-0 relative`}>
         {selectedConv ? (
           <>
-            {/* Header */}
-            <div className="px-md md:px-gutter h-16 border-b border-outline-variant flex items-center justify-between flex-shrink-0 gap-sm">
-              <div className="flex items-center gap-sm min-w-0">
-                {/* Mobile back button */}
-                <button
-                  onClick={() => setMobileView('list')}
-                  className="md:hidden -ml-2 p-2 rounded-lg hover:bg-surface-container"
-                  aria-label="Kembali ke daftar percakapan"
-                >
-                  <span className="material-symbols-outlined">arrow_back</span>
-                </button>
-                <div className="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center flex-shrink-0">
-                  <span className="material-symbols-outlined text-primary">person</span>
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-bold text-on-background text-[16px] leading-tight truncate">
-                    {selectedConv.client_name}
-                  </h3>
-                  <p className="text-label-caps text-[11px] text-outline truncate">
-                    {selectedConv.source === 'whatsapp' ? 'WhatsApp' : 'Instagram'} •{' '}
-                    {selectedConv.id}
-                  </p>
-                </div>
+            {/* Header (WhatsApp green) */}
+            <div className="bg-brand text-white px-sm md:px-md h-16 flex items-center gap-sm flex-shrink-0">
+              <button
+                onClick={() => setMobileView('list')}
+                className="md:hidden -ml-1 p-1.5 rounded-full hover:bg-white/10"
+                aria-label="Kembali ke daftar"
+              >
+                <span className="material-symbols-outlined">arrow_back</span>
+              </button>
+              <div
+                className={`w-10 h-10 rounded-full ${avatarColor(
+                  selectedConv.id,
+                )} flex items-center justify-center text-white font-semibold flex-shrink-0`}
+              >
+                {(selectedConv.client_name || '?').charAt(0).toUpperCase()}
               </div>
-              <div className="flex items-center gap-sm flex-shrink-0">
-                <div
-                  className={`hidden sm:flex items-center gap-xs px-3 py-1.5 rounded-full border ${
-                    selectedConv.mode === 'ai'
-                      ? 'bg-emerald-50 border-emerald-100'
-                      : 'bg-orange-50 border-orange-200'
-                  }`}
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      selectedConv.mode === 'ai' ? 'bg-emerald-500' : 'bg-orange-500'
-                    }`}
-                  />
-                  <span
-                    className={`text-label-caps uppercase font-bold ${
-                      selectedConv.mode === 'ai' ? 'text-emerald-700' : 'text-orange-700'
-                    }`}
-                  >
-                    {selectedConv.mode === 'ai' ? 'AI' : 'Human'}
-                  </span>
-                </div>
-                {/* Mobile control panel button */}
-                <button
-                  onClick={() => setMobileView('panel')}
-                  className="lg:hidden p-2 rounded-lg hover:bg-surface-container"
-                  aria-label="Buka control panel"
-                >
-                  <span className="material-symbols-outlined">tune</span>
-                </button>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-semibold text-[15px] leading-tight truncate">
+                  {selectedConv.client_name || 'Pelanggan'}
+                </h3>
+                <p className="text-[11px] text-white/60 truncate">
+                  {selectedConv.source === 'whatsapp' ? 'WhatsApp' : 'Instagram'} · {selectedConv.id}
+                </p>
               </div>
+
+              {/* Handoff button */}
+              <button
+                onClick={handleToggleMode}
+                disabled={togglingMode}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all active:scale-95 disabled:opacity-60 ${
+                  selectedConv.mode === 'ai'
+                    ? 'bg-amber text-white hover:brightness-105'
+                    : 'bg-white/15 text-white hover:bg-white/25'
+                }`}
+                title={selectedConv.mode === 'ai' ? 'Ambil alih dari AI' : 'Kembalikan ke AI'}
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {selectedConv.mode === 'ai' ? 'support_agent' : 'smart_toy'}
+                </span>
+                <span className="hidden sm:inline">
+                  {selectedConv.mode === 'ai' ? 'Ambil Alih' : 'Kembali ke AI'}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setMobileView('panel')}
+                className="xl:hidden p-1.5 rounded-full hover:bg-white/10"
+                aria-label="Info kontak"
+              >
+                <span className="material-symbols-outlined">info</span>
+              </button>
+            </div>
+
+            {/* Mode strip */}
+            <div
+              className={`flex items-center gap-xs px-md py-1.5 text-[11px] font-semibold flex-shrink-0 ${
+                selectedConv.mode === 'ai'
+                  ? 'bg-brand-soft text-brand-mid'
+                  : 'bg-amber-soft text-amber'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  selectedConv.mode === 'ai' ? 'bg-brand-accent animate-pulse' : 'bg-amber'
+                }`}
+              />
+              {selectedConv.mode === 'ai'
+                ? 'AI sedang menangani percakapan ini secara otomatis'
+                : 'Mode manusia — AI dijeda, kamu yang membalas'}
             </div>
 
             {/* Messages */}
             <div
               ref={messagesContainerRef}
               onScroll={handleMessagesScroll}
-              className="custom-scrollbar scroll-smooth flex-1 p-md md:p-gutter overflow-y-scroll flex flex-col gap-md md:gap-lg bg-background/30 min-h-0 relative"
+              className="custom-scrollbar scroll-smooth flex-1 px-sm md:px-md py-md overflow-y-auto flex flex-col gap-2 chat-wallpaper min-h-0 relative"
             >
               {messages.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center text-outline">
@@ -382,115 +448,120 @@ const ChatMonitoring: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex flex-col max-w-[85%] md:max-w-[75%] ${
-                      msg.role === 'client' ? 'items-start' : 'items-end self-end'
-                    }`}
-                  >
+                messages.map((msg) => {
+                  const isClient = msg.role === 'client'
+                  return (
                     <div
-                      className={`px-md py-3 rounded-xl shadow-sm relative ${
-                        msg.role === 'client'
-                          ? 'bg-white border border-outline-variant rounded-tl-none'
-                          : msg.role === 'ai'
-                          ? 'bg-gradient-to-br from-surface-container-low to-surface-container rounded-tr-none border border-primary/5'
-                          : 'bg-primary text-on-primary rounded-tr-none'
+                      key={msg.id}
+                      className={`flex flex-col max-w-[82%] sm:max-w-[70%] ${
+                        isClient ? 'items-start self-start' : 'items-end self-end'
                       }`}
                     >
-                      {msg.role !== 'client' && (
-                        <div className="text-[10px] opacity-60 mb-1 uppercase font-bold">
-                          {msg.role === 'ai' ? 'AI Agent' : 'Human'}
-                          {msg.ai_confidence
-                            ? ` • ${Math.round(msg.ai_confidence * 100)}%`
-                            : ''}
-                        </div>
-                      )}
-                      <p className="text-body-md whitespace-pre-wrap break-words">{msg.content}</p>
+                      <div
+                        className={`px-3 py-2 rounded-2xl shadow-sm text-[13.5px] leading-relaxed ${
+                          isClient
+                            ? 'bg-white text-on-surface rounded-bl-sm'
+                            : msg.role === 'ai'
+                            ? 'bg-brand-soft text-brand-dark rounded-br-sm border border-brand-accent/15'
+                            : 'bg-brand text-white rounded-br-sm'
+                        }`}
+                      >
+                        {!isClient && (
+                          <div className="text-[10px] font-bold uppercase tracking-wide opacity-60 mb-0.5">
+                            {msg.role === 'ai' ? 'AI Agent' : 'Operator'}
+                            {msg.ai_confidence ? ` · ${Math.round(msg.ai_confidence * 100)}%` : ''}
+                          </div>
+                        )}
+                        <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                      </div>
+                      <span className="text-[10px] text-outline mt-0.5 mx-1">
+                        {formatTime(msg.created_at)}
+                      </span>
                     </div>
-                    <span className="text-label-caps text-[10px] text-outline mt-1 mx-1">
-                      {formatTime(msg.created_at)}
-                    </span>
-                  </div>
-                ))
+                  )
+                })
               )}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Floating "↓ pesan baru" button — muncul kalau user scroll up
-                dan ada pesan baru yang belum dilihat */}
+            {/* New messages pill */}
             {!shouldAutoScroll && unseenCount > 0 && (
               <button
                 onClick={scrollToBottom}
-                className="absolute bottom-24 left-1/2 -translate-x-1/2 z-10 flex items-center gap-xs px-md py-2 bg-primary text-on-primary rounded-full shadow-lg hover:opacity-90 active:scale-95 transition-all animate-scale-up"
-                aria-label={`Scroll ke pesan terbaru (${unseenCount} pesan baru)`}
+                className="absolute bottom-24 left-1/2 -translate-x-1/2 z-10 flex items-center gap-xs px-md py-2 bg-brand text-white rounded-full shadow-soft-md hover:opacity-90 active:scale-95 transition-all animate-scale-up"
               >
                 <span className="material-symbols-outlined text-[18px]">arrow_downward</span>
-                <span className="text-label-caps font-bold uppercase">
-                  {unseenCount} pesan baru
-                </span>
+                <span className="text-[12px] font-semibold">{unseenCount} pesan baru</span>
               </button>
             )}
 
             {/* Input */}
-            <div className="p-md border-t border-outline-variant bg-white flex-shrink-0">
-              {showQuickReplies && quickReplies.length > 0 && (
-                <div className="mb-sm overflow-x-auto no-scrollbar">
-                  <div className="flex gap-2 pb-1">
-                    {quickReplies.map((qr) => (
-                      <button
-                        key={qr.id}
-                        onClick={() => {
-                          setMessageInput(qr.content)
-                          setShowQuickReplies(false)
-                        }}
-                        className="whitespace-nowrap px-3 py-1.5 border border-outline-variant rounded-full text-label-caps text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
-                      >
-                        {qr.title}
-                      </button>
-                    ))}
+            <div className="bg-surface border-t border-outline-variant p-sm flex-shrink-0">
+              {selectedConv.mode === 'ai' ? (
+                <button
+                  onClick={handleToggleMode}
+                  disabled={togglingMode}
+                  className="w-full py-3 rounded-full bg-amber-soft text-amber font-semibold text-[13px] flex items-center justify-center gap-xs hover:brightness-95 transition-all disabled:opacity-60"
+                >
+                  <span className="material-symbols-outlined text-[18px]">support_agent</span>
+                  AI sedang aktif — Ambil alih untuk membalas
+                </button>
+              ) : (
+                <>
+                  {showQuickReplies && quickReplies.length > 0 && (
+                    <div className="mb-sm overflow-x-auto no-scrollbar">
+                      <div className="flex gap-2 pb-1">
+                        {quickReplies.map((qr) => (
+                          <button
+                            key={qr.id}
+                            onClick={() => {
+                              setMessageInput(qr.content)
+                              setShowQuickReplies(false)
+                            }}
+                            className="whitespace-nowrap px-3 py-1.5 border border-outline-variant rounded-full text-[12px] text-on-surface-variant hover:border-brand-accent hover:text-brand-mid transition-colors"
+                          >
+                            {qr.title}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-end gap-xs bg-background rounded-2xl px-3 py-1.5 border border-outline-variant">
+                    <button
+                      onClick={() => setShowQuickReplies(!showQuickReplies)}
+                      className="text-outline hover:text-brand-mid transition-colors py-1.5"
+                      title="Quick Replies"
+                    >
+                      <span className="material-symbols-outlined">bolt</span>
+                    </button>
+                    <textarea
+                      rows={1}
+                      value={messageInput}
+                      onChange={(e) => setMessageInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          handleSendMessage()
+                        }
+                      }}
+                      placeholder="Ketik pesan..."
+                      className="flex-1 bg-transparent border-none focus:ring-0 outline-none text-[13.5px] resize-none py-2 min-w-0 max-h-32"
+                    />
+                    <button
+                      onClick={handleSendMessage}
+                      disabled={!messageInput.trim()}
+                      className="bg-brand-accent text-white w-10 h-10 rounded-full flex items-center justify-center hover:brightness-105 active:scale-95 transition-all disabled:opacity-40 flex-shrink-0"
+                      aria-label="Kirim"
+                    >
+                      <span className="material-symbols-outlined">send</span>
+                    </button>
                   </div>
-                </div>
+                </>
               )}
-
-              <div className="flex items-center gap-sm bg-surface-container-low rounded-xl px-md py-sm">
-                <button
-                  onClick={() => setShowQuickReplies(!showQuickReplies)}
-                  className="text-outline hover:text-primary transition-colors"
-                  title="Quick Replies"
-                >
-                  <span className="material-symbols-outlined">bolt</span>
-                </button>
-                <textarea
-                  rows={1}
-                  value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      handleSendMessage()
-                    }
-                  }}
-                  placeholder={
-                    selectedConv.mode === 'ai'
-                      ? 'AI sedang aktif — switch ke Manual untuk balas...'
-                      : 'Ketik pesan...'
-                  }
-                  className="flex-1 bg-transparent border-none focus:ring-0 outline-none text-body-md resize-none py-1 min-w-0"
-                  disabled={selectedConv.mode === 'ai'}
-                />
-                <button
-                  onClick={handleSendMessage}
-                  disabled={!messageInput.trim() || selectedConv.mode === 'ai'}
-                  className="bg-primary text-on-primary w-10 h-10 rounded-lg flex items-center justify-center hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-40 flex-shrink-0"
-                >
-                  <span className="material-symbols-outlined">send</span>
-                </button>
-              </div>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-outline p-md">
+          <div className="flex-1 flex items-center justify-center text-outline p-md chat-wallpaper">
             <div className="text-center">
               <span className="material-symbols-outlined text-6xl">chat</span>
               <p className="text-body-md mt-2">Pilih percakapan untuk memulai</p>
@@ -499,194 +570,142 @@ const ChatMonitoring: React.FC = () => {
         )}
       </section>
 
-      {/* Column 3: Control Panel */}
+      {/* ── Column 3: Contact / Control Panel ─────────────────── */}
       <section
-        className={`${panelVisibility} w-full lg:w-80 bg-background border-l border-outline-variant p-md lg:p-gutter flex-col gap-md overflow-y-scroll custom-scrollbar flex-shrink-0 min-h-0`}
+        className={`${panelVisibility} w-full xl:w-80 bg-surface border-l border-outline-variant flex-col min-h-0 flex-shrink-0`}
       >
-        {/* Mobile header with back */}
-        <div className="flex items-center justify-between lg:hidden mb-sm">
+        <div className="flex items-center gap-sm px-md h-16 border-b border-outline-variant flex-shrink-0">
           <button
             onClick={() => setMobileView('chat')}
-            className="-ml-2 p-2 rounded-lg hover:bg-surface-container flex items-center gap-xs"
+            className="xl:hidden -ml-1 p-1.5 rounded-full hover:bg-surface-container"
             aria-label="Kembali ke chat"
           >
             <span className="material-symbols-outlined">arrow_back</span>
-            <span className="text-body-md font-bold">Control Panel</span>
           </button>
+          <h3 className="text-[15px] font-semibold">Info Kontak</h3>
         </div>
 
-        {/* System Control */}
-        <div className="glass-card border border-outline-variant rounded-xl p-md">
-          <h4 className="font-label-caps text-label-caps text-outline uppercase mb-md">
-            System Control
-          </h4>
-          <div className="flex items-center justify-between p-sm bg-surface rounded-lg mb-sm">
-            <span className="text-body-md font-bold">Auto-Mode</span>
-            <button
-              onClick={handleToggleMode}
-              className={`w-12 h-6 rounded-full relative cursor-pointer shadow-inner transition-colors ${
-                selectedConv?.mode === 'ai' ? 'bg-emerald-500' : 'bg-outline'
-              }`}
-              aria-label="Toggle AI/Manual mode"
-            >
-              <div
-                className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-all ${
-                  selectedConv?.mode === 'ai' ? 'right-1' : 'left-1'
-                }`}
-              />
-            </button>
-          </div>
-          <button
-            onClick={handleToggleMode}
-            disabled={!selectedConv}
-            className="w-full py-3 bg-primary text-on-primary rounded-lg font-headline-sm text-[14px] font-bold uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all disabled:opacity-40"
-          >
-            {selectedConv?.mode === 'ai' ? 'Take Over Conversation' : 'Return to AI'}
-          </button>
-          <p className="mt-xs text-[10px] text-outline text-center">
-            AI akan pause saat Take Over aktif.
-          </p>
-        </div>
-
-        {/* AI Confidence */}
-        <div className="glass-card border border-outline-variant rounded-xl p-md">
-          <div className="flex justify-between items-center mb-md">
-            <h4 className="font-label-caps text-label-caps text-outline uppercase">
-              AI Confidence
-            </h4>
-            <span className="text-emerald-500 font-mono-label font-bold">
-              {selectedConv && messages.length > 0
-                ? (() => {
-                    const aiMsgs = messages.filter((m) => m.role === 'ai' && m.ai_confidence)
-                    if (aiMsgs.length === 0) return 'N/A'
-                    const avg =
-                      aiMsgs.reduce((s, m) => s + (m.ai_confidence || 0), 0) / aiMsgs.length
-                    return `${Math.round(avg * 100)}%`
-                  })()
-                : 'N/A'}
-            </span>
-          </div>
-          <div className="overflow-hidden h-2 mb-sm rounded bg-surface-container">
-            <div
-              className="h-full bg-emerald-500 transition-all"
-              style={{
-                width: (() => {
-                  const aiMsgs = messages.filter((m) => m.role === 'ai' && m.ai_confidence)
-                  if (aiMsgs.length === 0) return '0%'
-                  const avg =
-                    aiMsgs.reduce((s, m) => s + (m.ai_confidence || 0), 0) / aiMsgs.length
-                  return `${Math.round(avg * 100)}%`
-                })(),
-              }}
-            />
-          </div>
-          <div className="flex items-center gap-xs">
-            <span className="material-symbols-outlined text-[16px] text-emerald-500">
-              verified
-            </span>
-            <span className="text-body-md text-on-surface-variant">Avg dari semua pesan AI</span>
-          </div>
-        </div>
-
-        {/* n8n Status */}
-        <div className="glass-card border border-outline-variant rounded-xl p-md">
-          <h4 className="font-label-caps text-label-caps text-outline uppercase mb-md">
-            Integrations
-          </h4>
-          <div className="flex items-center justify-between mb-sm">
-            <div className="flex items-center gap-xs">
-              <div className="w-8 h-8 rounded bg-primary text-white flex items-center justify-center font-black italic text-[10px]">
-                n8n
-              </div>
-              <span className="text-body-md font-bold">n8n Webhook</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-              <span className="text-[11px] font-bold text-emerald-600">Active</span>
-            </div>
-          </div>
-          <div className="p-xs bg-surface-container rounded font-mono-label text-[10px] text-outline truncate">
-            {n8nService.getBaseUrl()}
-          </div>
-          <div className="flex items-center justify-between mt-sm">
-            <div className="flex items-center gap-xs">
-              <div className="w-8 h-8 rounded bg-emerald-600 text-white flex items-center justify-center font-black text-[10px]">
-                SB
-              </div>
-              <span className="text-body-md font-bold">Supabase</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-              <span className="text-[11px] font-bold text-emerald-600">Realtime</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Client Profile */}
-        <div className="glass-card border border-outline-variant rounded-xl p-md flex-1">
-          <h4 className="font-label-caps text-label-caps text-outline uppercase mb-md">
-            Client Profile
-          </h4>
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-md space-y-md">
           {selectedConv ? (
-            <div className="space-y-md">
-              <div>
-                <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
-                  Nama
-                </span>
-                <p className="font-bold text-on-background">{selectedConv.client_name}</p>
-              </div>
-              <div>
-                <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
-                  Phone / ID
-                </span>
-                <p className="text-body-md font-mono-label break-all">{selectedConv.id}</p>
-              </div>
-              <div>
-                <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
-                  Source
-                </span>
-                <p className="text-body-md capitalize">{selectedConv.source}</p>
-              </div>
-              {selectedConv.metadata && Object.keys(selectedConv.metadata).length > 0 && (
-                <div>
-                  <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
-                    Project Info
+            <>
+              {/* Profile */}
+              <div className="flex flex-col items-center text-center">
+                <div
+                  className={`w-20 h-20 rounded-full ${avatarColor(
+                    selectedConv.id,
+                  )} flex items-center justify-center text-white font-semibold text-[30px] mb-sm`}
+                >
+                  {(selectedConv.client_name || '?').charAt(0).toUpperCase()}
+                </div>
+                <p className="font-semibold text-[16px] text-on-surface">
+                  {selectedConv.client_name || 'Pelanggan'}
+                </p>
+                <p className="text-[12px] text-outline font-mono-label break-all">
+                  {selectedConv.id}
+                </p>
+                <span
+                  className={`mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                    selectedConv.mode === 'ai'
+                      ? 'bg-brand-soft text-brand-mid'
+                      : 'bg-amber-soft text-amber'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[14px]">
+                    {selectedConv.mode === 'ai' ? 'smart_toy' : 'support_agent'}
                   </span>
-                  {(selectedConv.metadata as Record<string, string>).buildingType && (
-                    <div className="flex items-center gap-xs px-2 py-1 bg-surface-container rounded border border-outline-variant w-fit">
-                      <span className="material-symbols-outlined text-[14px]">home</span>
-                      <span className="text-body-md text-on-surface-variant">
-                        {(selectedConv.metadata as Record<string, string>).buildingType}
-                        {(selectedConv.metadata as Record<string, string>).tier
-                          ? ` — ${(selectedConv.metadata as Record<string, string>).tier}`
-                          : ''}
+                  {selectedConv.mode === 'ai' ? 'Ditangani AI' : 'Ditangani manusia'}
+                </span>
+              </div>
+
+              {/* Handoff control */}
+              <button
+                onClick={handleToggleMode}
+                disabled={togglingMode}
+                className={`w-full py-3 rounded-xl font-semibold text-[13px] flex items-center justify-center gap-xs transition-all active:scale-[0.98] disabled:opacity-60 ${
+                  selectedConv.mode === 'ai'
+                    ? 'bg-amber text-white hover:brightness-105'
+                    : 'bg-brand text-white hover:opacity-90'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {selectedConv.mode === 'ai' ? 'support_agent' : 'smart_toy'}
+                </span>
+                {selectedConv.mode === 'ai' ? 'Ambil Alih Percakapan' : 'Kembalikan ke AI'}
+              </button>
+
+              {/* Project info */}
+              {(projectType || estimatedValue) && (
+                <div className="bg-background rounded-xl p-md border border-outline-variant">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-outline mb-sm">
+                    Info Proyek
+                  </p>
+                  {projectType && (
+                    <div className="flex items-center gap-xs mb-1">
+                      <span className="material-symbols-outlined text-[16px] text-brand-mid">
+                        home
                       </span>
+                      <span className="text-[13px] text-on-surface-variant">{projectType}</span>
                     </div>
                   )}
-                  {(selectedConv.metadata as Record<string, string>).estimatedValue && (
-                    <p className="text-body-md font-bold text-secondary mt-sm">
-                      {(selectedConv.metadata as Record<string, string>).estimatedValue}
-                    </p>
+                  {estimatedValue && (
+                    <p className="text-[15px] font-bold text-brand-mid mt-1">{estimatedValue}</p>
                   )}
                 </div>
               )}
-              <div>
-                <span className="text-label-caps text-[10px] text-outline uppercase block mb-1">
-                  Last Active
-                </span>
-                <p className="text-body-md">
-                  {new Date(selectedConv.last_message_at).toLocaleString('id-ID', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
+
+              {/* AI confidence */}
+              <div className="bg-background rounded-xl p-md border border-outline-variant">
+                <div className="flex items-center justify-between mb-sm">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-outline">
+                    AI Confidence
+                  </p>
+                  <span className="text-brand-mid font-mono-label font-bold">
+                    {aiConfidence !== null ? `${aiConfidence}%` : 'N/A'}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-surface-container overflow-hidden">
+                  <div
+                    className="h-full bg-brand-accent transition-all"
+                    style={{ width: `${aiConfidence ?? 0}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-outline mt-1">Rata-rata semua balasan AI</p>
               </div>
-            </div>
+
+              {/* Integrations */}
+              <div className="bg-background rounded-xl p-md border border-outline-variant space-y-sm">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-outline">
+                  Integrasi
+                </p>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-xs">
+                    <div className="w-7 h-7 rounded bg-brand text-white flex items-center justify-center font-black italic text-[9px]">
+                      n8n
+                    </div>
+                    <span className="text-[13px] font-medium">n8n Webhook</span>
+                  </div>
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-brand-mid">
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-accent" /> Terhubung
+                  </span>
+                </div>
+                <div className="bg-surface-container rounded p-2 font-mono-label text-[10px] text-outline truncate">
+                  {n8nService.getBaseUrl()}
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-xs">
+                    <div className="w-7 h-7 rounded bg-brand-mid text-white flex items-center justify-center font-black text-[9px]">
+                      SB
+                    </div>
+                    <span className="text-[13px] font-medium">Supabase</span>
+                  </div>
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-brand-mid">
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-accent animate-pulse" /> Polling
+                  </span>
+                </div>
+              </div>
+            </>
           ) : (
-            <p className="text-body-md text-outline">Pilih percakapan</p>
+            <p className="text-body-md text-outline text-center mt-lg">Pilih percakapan</p>
           )}
         </div>
       </section>

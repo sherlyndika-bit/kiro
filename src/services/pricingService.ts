@@ -416,7 +416,7 @@ export function formatIDRShort(num: number): string {
 // ============================================================
 export class PricingSheetService {
   private static webhookUrl =
-    import.meta.env.VITE_N8N_WEBHOOK_URL || 'http://localhost:5678/webhook'
+    import.meta.env.VITE_N8N_WEBHOOK_URL || 'https://n8n.srv1696073.hstgr.cloud/webhook'
 
   // Will replace mock data with live data from spreadsheet
   static async fetchConstructionRates(): Promise<ConstructionRate[]> {

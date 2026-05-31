@@ -228,7 +228,18 @@ insert into public.ai_config (key, value, description) values
 on conflict (key) do update set value = excluded.value;
 
 -- ============================================================
--- ROW LEVEL SECURITY (RLS) — biar aman
+-- ROW LEVEL SECURITY (RLS)
+-- ============================================================
+-- ⚠️  SECURITY NOTE
+-- The dashboard ships with the PUBLIC anon key in the browser bundle, so any
+-- policy that grants the `anon` role write access effectively lets anyone with
+-- the key modify that table. For production you should EITHER:
+--   1. Put the dashboard behind Supabase Auth and scope write policies to
+--      `auth.role() = 'authenticated'` (and add an owner/operator check), OR
+--   2. Route all writes through n8n using the SERVICE_ROLE key (which bypasses
+--      RLS) and keep the browser client read-only.
+-- Until then, reads are public and writes are explicitly scoped per table below
+-- so each grant is intentional rather than a blanket `for all`.
 -- ============================================================
 alter table public.conversations enable row level security;
 alter table public.messages enable row level security;
@@ -238,27 +249,30 @@ alter table public.templates enable row level security;
 alter table public.quick_replies enable row level security;
 alter table public.ai_config enable row level security;
 
--- Policy: anon bisa baca semua (dashboard pakai anon key)
-create policy "anon read conversations" on public.conversations for select using (true);
-create policy "anon write conversations" on public.conversations for all using (true);
+-- Helper: re-runnable policy creation
+do $$
+declare
+  t text;
+begin
+  foreach t in array array[
+    'conversations','messages','documents','clients','templates','quick_replies','ai_config'
+  ]
+  loop
+    -- public read
+    execute format('drop policy if exists "public read %1$s" on public.%1$I', t);
+    execute format('create policy "public read %1$s" on public.%1$I for select using (true)', t);
 
-create policy "anon read messages" on public.messages for select using (true);
-create policy "anon write messages" on public.messages for all using (true);
+    -- anon write (INSERT/UPDATE/DELETE) — see SECURITY NOTE above before prod.
+    execute format('drop policy if exists "anon insert %1$s" on public.%1$I', t);
+    execute format('create policy "anon insert %1$s" on public.%1$I for insert with check (true)', t);
 
-create policy "anon read documents" on public.documents for select using (true);
-create policy "anon write documents" on public.documents for all using (true);
+    execute format('drop policy if exists "anon update %1$s" on public.%1$I', t);
+    execute format('create policy "anon update %1$s" on public.%1$I for update using (true) with check (true)', t);
 
-create policy "anon read clients" on public.clients for select using (true);
-create policy "anon write clients" on public.clients for all using (true);
-
-create policy "anon read templates" on public.templates for select using (true);
-create policy "anon write templates" on public.templates for all using (true);
-
-create policy "anon read quick_replies" on public.quick_replies for select using (true);
-create policy "anon write quick_replies" on public.quick_replies for all using (true);
-
-create policy "anon read ai_config" on public.ai_config for select using (true);
-create policy "anon write ai_config" on public.ai_config for all using (true);
+    execute format('drop policy if exists "anon delete %1$s" on public.%1$I', t);
+    execute format('create policy "anon delete %1$s" on public.%1$I for delete using (true)', t);
+  end loop;
+end $$;
 
 -- ============================================================
 -- REALTIME — enable untuk tabel yang perlu live update

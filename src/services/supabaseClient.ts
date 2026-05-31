@@ -1,7 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://wbfqudrzwsnlzevxjlkm.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndiZnF1ZHJ6d3NubHpldnhqbGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2OTY2NjUsImV4cCI6MjA5NTI3MjY2NX0.6ceWsWJ2g9ilLdHvKgolh7rKt5X8JEQyBHwDEhGJ4lc'
+// Supabase project URL + anon key.
+// Prefer environment variables (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY);
+// fall back to the public project defaults so the app still boots without a .env.
+// NOTE: the anon key is a public client key — never put the service_role key here.
+const SUPABASE_URL =
+  import.meta.env.VITE_SUPABASE_URL || 'https://wbfqudrzwsnlzevxjlkm.supabase.co'
+const SUPABASE_ANON_KEY =
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndiZnF1ZHJ6d3NubHpldnhqbGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2OTY2NjUsImV4cCI6MjA5NTI3MjY2NX0.6ceWsWJ2g9ilLdHvKgolh7rKt5X8JEQyBHwDEhGJ4lc'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: {
@@ -81,6 +88,7 @@ export interface DBClient {
   id: string
   name: string | null
   phone: string | null
+  ig_username: string | null
   source: string
   status: string
   building_type: string | null
@@ -88,9 +96,12 @@ export interface DBClient {
   area_sqm: number | null
   rab_avg: number | null
   fee_avg: number | null
+  last_proposal_no: string | null
   last_contact_at: string | null
+  notes: string | null
   metadata: Record<string, unknown>
   created_at: string
+  updated_at: string
 }
 
 // ============================================================

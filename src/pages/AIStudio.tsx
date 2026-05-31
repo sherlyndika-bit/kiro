@@ -119,9 +119,9 @@ const AIStudio: React.FC = () => {
   }
 
   return (
-    <div className="p-gutter max-w-container-max space-y-md">
+    <div className="p-sm md:p-gutter max-w-container-max mx-auto space-y-md">
       <div>
-        <h1 className="font-display-lg text-display-lg font-bold text-on-background">AI Studio</h1>
+        <h1 className="font-serif-display text-display-lg text-on-background">AI Studio</h1>
         <p className="text-body-md text-on-surface-variant">
           Kelola templates, quick replies, dan konfigurasi AI
         </p>

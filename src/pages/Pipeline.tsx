@@ -8,7 +8,7 @@ const stageConfig: Record<string, { label: string; color: string; count: number 
   estimasi: { label: 'Estimasi', color: 'bg-tertiary-fixed text-on-tertiary-fixed', count: 0 },
   proposal: { label: 'Proposal', color: 'bg-primary-fixed text-on-primary-fixed', count: 0 },
   negosiasi: { label: 'Negosiasi', color: 'bg-error-container text-on-error-container', count: 0 },
-  deal: { label: 'Deal Closed', color: 'bg-emerald-100 text-emerald-700', count: 0 },
+  deal: { label: 'Deal Closed', color: 'bg-brand-soft text-brand-mid', count: 0 },
 }
 
 const formatIDRShort = (value: number | null) => {
@@ -49,34 +49,32 @@ const Pipeline: React.FC = () => {
       : 0
 
   return (
-    <div className="p-gutter">
+    <div className="p-sm md:p-gutter">
       {/* Header */}
       <div className="mb-md">
-        <h1 className="font-display-lg text-display-lg font-bold text-on-background">
-          Client Database
-        </h1>
+        <h1 className="font-serif-display text-display-lg text-on-background">Client Database</h1>
         <p className="text-body-md text-on-surface-variant">
           Pipeline tracking untuk semua lead dan client
         </p>
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-md mb-md">
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
-          <div className="text-label-caps text-outline uppercase mb-1">Total Pipeline Value</div>
-          <div className="font-display-lg text-[28px] font-bold">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-sm md:gap-md mb-md">
+        <div className="bg-surface border border-outline-variant rounded-2xl p-md">
+          <div className="text-[11px] font-semibold text-outline uppercase tracking-wide mb-1">Total Pipeline Value</div>
+          <div className="font-serif-display text-[26px]">
             {loading ? '—' : formatIDRShort(totalValue)}
           </div>
         </div>
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
-          <div className="text-label-caps text-outline uppercase mb-1">Conversion Rate</div>
-          <div className="font-display-lg text-[28px] font-bold text-emerald-600">
+        <div className="bg-surface border border-outline-variant rounded-2xl p-md">
+          <div className="text-[11px] font-semibold text-outline uppercase tracking-wide mb-1">Conversion Rate</div>
+          <div className="font-serif-display text-[26px] text-brand-mid">
             {loading ? '—' : `${convRate}%`}
           </div>
         </div>
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
-          <div className="text-label-caps text-outline uppercase mb-1">Avg. Deal Size</div>
-          <div className="font-display-lg text-[28px] font-bold">
+        <div className="bg-surface border border-outline-variant rounded-2xl p-md">
+          <div className="text-[11px] font-semibold text-outline uppercase tracking-wide mb-1">Avg. Deal Size</div>
+          <div className="font-serif-display text-[26px]">
             {loading ? '—' : formatIDRShort(avgDeal)}
           </div>
         </div>
