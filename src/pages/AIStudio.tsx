@@ -11,6 +11,9 @@ import {
 
 type Tab = 'templates' | 'quick-replies' | 'config' | 'documents'
 
+// Keys that hold secrets / lock state — never expose in the editable config list.
+const SENSITIVE_CONFIG_KEYS = ['settings_pin', 'dashboard_password_hash', 'dashboard_email']
+
 const AIStudio: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('templates')
   const [templates, setTemplates] = useState<DBTemplate[]>([])
@@ -371,7 +374,9 @@ const AIStudio: React.FC = () => {
                 Konfigurasi behavior AI Agent
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-                {Object.entries(aiConfig).map(([key, value]) => (
+                {Object.entries(aiConfig)
+                  .filter(([key]) => !SENSITIVE_CONFIG_KEYS.includes(key))
+                  .map(([key, value]) => (
                   <div key={key} className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
                     <label className="text-label-caps text-outline uppercase block mb-2">{key.replace(/_/g, ' ')}</label>
                     <div className="flex gap-sm">

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { AIConfigService, supabase } from '../services/supabaseClient'
 import { n8nService } from '../services/n8nWebhookService'
+import { authService } from '../services/auth'
 
 type ConnState = 'idle' | 'ok' | 'fail'
 
@@ -26,6 +27,7 @@ const Settings: React.FC = () => {
   const [webhookUrl, setWebhookUrl] = useState(
     n8nService.getBaseUrl() || 'https://n8n.srv1696073.hstgr.cloud/webhook',
   )
+  const [aiModel, setAiModel] = useState('llama-3.3-70b-versatile')
 
   // AI toggles state
   const [aiToggles, setAiToggles] = useState({
@@ -34,6 +36,26 @@ const Settings: React.FC = () => {
     content_generator: true,
     confidence_alerts: true,
   })
+
+  // ── Settings lock + PIN ──────────────────────────────────────
+  const [locked, setLocked] = useState(true)
+  const [pinModal, setPinModal] = useState<null | 'unlock' | 'set'>(null)
+  const [pinInput, setPinInput] = useState('')
+  const [pinNew, setPinNew] = useState('')
+  const [pinConfirm, setPinConfirm] = useState('')
+  const [pinError, setPinError] = useState('')
+  const [savingPin, setSavingPin] = useState(false)
+
+  // ── Account / password ───────────────────────────────────────
+  const [curPwd, setCurPwd] = useState('')
+  const [newPwd, setNewPwd] = useState('')
+  const [confirmPwd, setConfirmPwd] = useState('')
+  const [savingPwd, setSavingPwd] = useState(false)
+  const [pwdMsg, setPwdMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+
+  const hasPin = !!config.settings_pin
+  const sessionEmail = authService.getSession()?.email || authService.defaultEmail
+  const canManagePassword = authService.canManagePassword()
 
   useEffect(() => {
     loadConfig()
@@ -60,6 +82,7 @@ const Settings: React.FC = () => {
     if (cfg.company_name) setCompanyName(cfg.company_name)
     if (cfg.company_email) setCompanyEmail(cfg.company_email)
     if (cfg.company_phone) setCompanyPhone(cfg.company_phone)
+    if (cfg.groq_model) setAiModel(cfg.groq_model)
     if (cfg.webhook_url) {
       setWebhookUrl(cfg.webhook_url)
       n8nService.setBaseUrl(cfg.webhook_url)
@@ -83,8 +106,8 @@ const Settings: React.FC = () => {
       AIConfigService.set('company_email', companyEmail),
       AIConfigService.set('company_phone', companyPhone),
       AIConfigService.set('webhook_url', webhookUrl),
+      AIConfigService.set('groq_model', aiModel),
     ])
-    // Wire ke n8nService supaya seluruh aplikasi pakai URL baru
     n8nService.setBaseUrl(webhookUrl)
     setSaving(false)
     setSaved(true)
@@ -92,6 +115,7 @@ const Settings: React.FC = () => {
   }
 
   const toggleAI = async (key: keyof typeof aiToggles) => {
+    if (locked) return
     const newVal = !aiToggles[key]
     setAiToggles((prev) => ({ ...prev, [key]: newVal }))
     await AIConfigService.set(key, String(newVal))
@@ -100,11 +124,84 @@ const Settings: React.FC = () => {
   const testConnection = async () => {
     setTestingConn(true)
     setConnStatus('idle')
-    // Pastikan service pakai URL terkini sebelum ping
     n8nService.setBaseUrl(webhookUrl)
     const ok = await n8nService.ping(5000)
     setConnStatus(ok ? 'ok' : 'fail')
     setTestingConn(false)
+  }
+
+  // ── Lock handlers ────────────────────────────────────────────
+  const requestUnlock = () => {
+    setPinError('')
+    setPinInput('')
+    if (hasPin) {
+      setPinModal('unlock')
+    } else {
+      setLocked(false)
+    }
+  }
+
+  const submitUnlock = () => {
+    if (pinInput !== config.settings_pin) {
+      setPinError('PIN salah.')
+      return
+    }
+    setLocked(false)
+    setPinModal(null)
+    setPinInput('')
+  }
+
+  const openSetPin = () => {
+    setPinError('')
+    setPinNew('')
+    setPinConfirm('')
+    setPinModal('set')
+  }
+
+  const savePin = async () => {
+    if (!/^\d{4,6}$/.test(pinNew)) {
+      setPinError('PIN harus 4–6 digit angka.')
+      return
+    }
+    if (pinNew !== pinConfirm) {
+      setPinError('Konfirmasi PIN tidak cocok.')
+      return
+    }
+    setSavingPin(true)
+    await AIConfigService.set('settings_pin', pinNew)
+    setConfig((prev) => ({ ...prev, settings_pin: pinNew }))
+    setSavingPin(false)
+    setPinModal(null)
+  }
+
+  const removePin = async () => {
+    setSavingPin(true)
+    await AIConfigService.set('settings_pin', '')
+    setConfig((prev) => ({ ...prev, settings_pin: '' }))
+    setSavingPin(false)
+    setPinModal(null)
+  }
+
+  // ── Password handler ─────────────────────────────────────────
+  const submitChangePwd = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (savingPwd) return
+    setPwdMsg(null)
+    if (newPwd !== confirmPwd) {
+      setPwdMsg({ type: 'err', text: 'Konfirmasi password tidak cocok.' })
+      return
+    }
+    setSavingPwd(true)
+    const res = await authService.changePassword(curPwd, newPwd)
+    setSavingPwd(false)
+    if (res.ok) {
+      setPwdMsg({ type: 'ok', text: 'Password berhasil diubah.' })
+      setCurPwd('')
+      setNewPwd('')
+      setConfirmPwd('')
+    } else {
+      setPwdMsg({ type: 'err', text: res.error || 'Gagal mengubah password.' })
+    }
   }
 
   const aiToggleItems = [
@@ -127,19 +224,159 @@ const Settings: React.FC = () => {
     { icon: 'database', name: 'Supabase', detail: 'Database', state: conn.supabase },
   ]
 
+  const inputCls =
+    'w-full px-md py-3 bg-surface-container-low border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-brand-accent outline-none disabled:opacity-60 disabled:cursor-not-allowed'
+
   return (
-    <div className="p-sm md:p-gutter space-y-md">
+    <div className="p-sm md:p-gutter max-w-container-max mx-auto space-y-md">
       <div>
         <h1 className="font-serif-display text-display-lg text-on-background">Pengaturan</h1>
         <p className="text-body-md text-on-surface-variant">
-          Kelola preferensi dan integrasi sistem
+          Kelola akun, preferensi, dan integrasi sistem
         </p>
+      </div>
+
+      {/* ── Account ─────────────────────────────────────────── */}
+      <div className="bg-surface border border-outline-variant rounded-2xl p-md">
+        <h3 className="text-headline-sm font-bold mb-md flex items-center gap-xs">
+          <span className="material-symbols-outlined text-[20px] text-brand-mid">account_circle</span>
+          Akun
+        </h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-md">
+          <div>
+            <label className="text-[11px] font-semibold text-outline uppercase tracking-wide block mb-2">
+              Email Login
+            </label>
+            <div className="flex items-center gap-sm px-md py-3 bg-surface-container-low border border-outline-variant rounded-lg">
+              <span className="material-symbols-outlined text-[18px] text-outline">mail</span>
+              <span className="text-body-md truncate">{sessionEmail}</span>
+            </div>
+            <p className="text-[11px] text-outline mt-1.5">
+              Email diatur lewat env (VITE_DASHBOARD_EMAIL). Hubungi admin untuk mengubahnya.
+            </p>
+          </div>
+
+          <form onSubmit={submitChangePwd} className="space-y-sm">
+            <label className="text-[11px] font-semibold text-outline uppercase tracking-wide block">
+              Ubah Password
+            </label>
+            <input
+              type="password"
+              value={curPwd}
+              onChange={(e) => setCurPwd(e.target.value)}
+              placeholder="Password saat ini"
+              autoComplete="current-password"
+              disabled={!canManagePassword}
+              className={inputCls}
+            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm">
+              <input
+                type="password"
+                value={newPwd}
+                onChange={(e) => setNewPwd(e.target.value)}
+                placeholder="Password baru"
+                autoComplete="new-password"
+                disabled={!canManagePassword}
+                className={inputCls}
+              />
+              <input
+                type="password"
+                value={confirmPwd}
+                onChange={(e) => setConfirmPwd(e.target.value)}
+                placeholder="Konfirmasi"
+                autoComplete="new-password"
+                disabled={!canManagePassword}
+                className={inputCls}
+              />
+            </div>
+            {pwdMsg && (
+              <p
+                className={`text-[12.5px] font-medium ${
+                  pwdMsg.type === 'ok' ? 'text-brand-mid' : 'text-error'
+                }`}
+              >
+                {pwdMsg.text}
+              </p>
+            )}
+            {!canManagePassword && (
+              <p className="text-[11px] text-outline">
+                Ubah password butuh koneksi aman (https atau localhost).
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={savingPwd || !canManagePassword || !curPwd || !newPwd}
+              className="py-2.5 px-md bg-brand text-white rounded-lg font-bold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-xs"
+            >
+              {savingPwd ? (
+                <>
+                  <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+                  Menyimpan...
+                </>
+              ) : (
+                'Ubah Password'
+              )}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* ── Lock banner ─────────────────────────────────────── */}
+      <div
+        className={`rounded-2xl p-md border flex flex-col sm:flex-row sm:items-center gap-sm ${
+          locked ? 'bg-amber-soft border-amber/30' : 'bg-brand-soft border-brand-accent/30'
+        }`}
+      >
+        <span
+          className={`material-symbols-outlined text-[24px] ${locked ? 'text-amber' : 'text-brand-mid'}`}
+        >
+          {locked ? 'lock' : 'lock_open'}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-on-surface">
+            {locked ? 'Pengaturan sensitif terkunci' : 'Mode edit aktif'}
+          </p>
+          <p className="text-[12.5px] text-on-surface-variant">
+            {locked
+              ? 'Konfigurasi AI & webhook dikunci untuk mencegah perubahan tak sengaja.'
+              : hasPin
+              ? 'Jangan lupa kunci lagi setelah selesai.'
+              : 'Belum ada PIN. Atur PIN agar pengaturan terlindungi.'}
+          </p>
+        </div>
+        <div className="flex items-center gap-sm flex-shrink-0">
+          {locked ? (
+            <button
+              onClick={requestUnlock}
+              className="py-2 px-md bg-brand text-white rounded-lg font-bold text-[13px] hover:opacity-90 flex items-center gap-xs"
+            >
+              <span className="material-symbols-outlined text-[18px]">lock_open</span>
+              Buka Kunci
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={openSetPin}
+                className="py-2 px-md border border-outline-variant rounded-lg font-bold text-[13px] hover:bg-surface-container"
+              >
+                {hasPin ? 'Ubah PIN' : 'Atur PIN'}
+              </button>
+              <button
+                onClick={() => setLocked(true)}
+                className="py-2 px-md bg-brand text-white rounded-lg font-bold text-[13px] hover:opacity-90 flex items-center gap-xs"
+              >
+                <span className="material-symbols-outlined text-[18px]">lock</span>
+                Kunci
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-md">
         {/* Company Profile */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
-          <h3 className="font-headline-sm text-headline-sm font-bold mb-md">Profil Perusahaan</h3>
+        <div className="bg-surface border border-outline-variant rounded-2xl p-md">
+          <h3 className="text-headline-sm font-bold mb-md">Profil Perusahaan</h3>
           {loading ? (
             <div className="space-y-sm">
               {[1, 2, 3].map((i) => (
@@ -154,7 +391,7 @@ const Settings: React.FC = () => {
                   type="text"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
-                  className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md focus:ring-2 focus:ring-secondary outline-none"
+                  className={inputCls}
                 />
               </div>
               <div>
@@ -163,7 +400,7 @@ const Settings: React.FC = () => {
                   type="email"
                   value={companyEmail}
                   onChange={(e) => setCompanyEmail(e.target.value)}
-                  className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md focus:ring-2 focus:ring-secondary outline-none"
+                  className={inputCls}
                 />
               </div>
               <div>
@@ -172,13 +409,13 @@ const Settings: React.FC = () => {
                   type="text"
                   value={companyPhone}
                   onChange={(e) => setCompanyPhone(e.target.value)}
-                  className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md focus:ring-2 focus:ring-secondary outline-none"
+                  className={inputCls}
                 />
               </div>
               <button
                 onClick={saveProfile}
                 disabled={saving}
-                className="w-full py-3 bg-primary text-on-primary rounded-lg font-headline-sm text-[14px] font-bold uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-sm"
+                className="w-full py-3 bg-primary text-on-primary rounded-lg text-[14px] font-bold uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-sm"
               >
                 {saving ? (
                   <>
@@ -198,14 +435,21 @@ const Settings: React.FC = () => {
           )}
         </div>
 
-        {/* AI Configuration */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
-          <h3 className="font-headline-sm text-headline-sm font-bold mb-md">Konfigurasi AI — Syifa</h3>
-          <div className="space-y-sm">
+        {/* AI Configuration (lockable) */}
+        <div className="bg-surface border border-outline-variant rounded-2xl p-md">
+          <h3 className="text-headline-sm font-bold mb-md flex items-center gap-xs">
+            Konfigurasi AI — Syifa
+            {locked && (
+              <span className="material-symbols-outlined text-[18px] text-amber" title="Terkunci">
+                lock
+              </span>
+            )}
+          </h3>
+          <div className={`space-y-sm ${locked ? 'opacity-70' : ''}`}>
             {aiToggleItems.map((t) => (
               <div
                 key={t.key}
-                className="flex items-center justify-between p-sm bg-surface rounded-lg border border-outline-variant"
+                className="flex items-center justify-between p-sm bg-surface-container-low rounded-lg border border-outline-variant"
               >
                 <div className="flex-1">
                   <p className="text-body-md font-bold">{t.name}</p>
@@ -213,9 +457,11 @@ const Settings: React.FC = () => {
                 </div>
                 <button
                   onClick={() => toggleAI(t.key)}
-                  className={`w-12 h-6 rounded-full relative cursor-pointer shadow-inner transition-colors ${
-                    aiToggles[t.key] ? 'bg-emerald-500' : 'bg-outline'
-                  }`}
+                  disabled={locked}
+                  aria-label={`Toggle ${t.name}`}
+                  className={`w-12 h-6 rounded-full relative shadow-inner transition-colors disabled:cursor-not-allowed ${
+                    aiToggles[t.key] ? 'bg-brand-accent' : 'bg-outline'
+                  } ${locked ? '' : 'cursor-pointer'}`}
                 >
                   <div
                     className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-all ${
@@ -228,14 +474,14 @@ const Settings: React.FC = () => {
           </div>
         </div>
 
-        {/* Integrations */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+        {/* Integrations (read-only) */}
+        <div className="bg-surface border border-outline-variant rounded-2xl p-md">
           <div className="flex items-center justify-between mb-md">
-            <h3 className="font-headline-sm text-headline-sm font-bold">Integrasi</h3>
+            <h3 className="text-headline-sm font-bold">Integrasi</h3>
             <button
               onClick={checkConnections}
               disabled={checking}
-              className="flex items-center gap-xs text-label-caps font-bold text-secondary uppercase disabled:opacity-50"
+              className="flex items-center gap-xs text-label-caps font-bold text-brand-mid uppercase disabled:opacity-50"
             >
               <span className={`material-symbols-outlined text-[16px] ${checking ? 'animate-spin' : ''}`}>
                 sync
@@ -253,7 +499,7 @@ const Settings: React.FC = () => {
                 >
                   <div className="flex items-center gap-sm min-w-0">
                     <div className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center flex-shrink-0">
-                      <span className="material-symbols-outlined text-primary text-[18px]">
+                      <span className="material-symbols-outlined text-brand-mid text-[18px]">
                         {int.icon}
                       </span>
                     </div>
@@ -272,45 +518,56 @@ const Settings: React.FC = () => {
           </div>
         </div>
 
-        {/* n8n Webhook */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
-          <h3 className="font-headline-sm text-headline-sm font-bold mb-md">n8n Webhook URL</h3>
+        {/* n8n Webhook (lockable) */}
+        <div className="bg-surface border border-outline-variant rounded-2xl p-md">
+          <h3 className="text-headline-sm font-bold mb-md flex items-center gap-xs">
+            n8n Webhook URL
+            {locked && (
+              <span className="material-symbols-outlined text-[18px] text-amber" title="Terkunci">
+                lock
+              </span>
+            )}
+          </h3>
           <div className="space-y-md">
             <div>
-              <label className="text-label-caps text-outline uppercase block mb-2">
-                Webhook Base URL
-              </label>
+              <label className="text-label-caps text-outline uppercase block mb-2">Webhook Base URL</label>
               <input
                 type="text"
                 value={webhookUrl}
                 onChange={(e) => setWebhookUrl(e.target.value)}
-                className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg font-mono-label text-mono-label focus:ring-2 focus:ring-secondary outline-none"
+                disabled={locked}
+                className={`${inputCls} font-mono-label text-mono-label`}
               />
             </div>
 
-            {/* AI Model Config */}
             <div>
-              <label className="text-label-caps text-outline uppercase block mb-2">
-                AI Model (Groq)
-              </label>
+              <label className="text-label-caps text-outline uppercase block mb-2">AI Model (Groq)</label>
               <input
                 type="text"
-                defaultValue={config.groq_model || 'llama-3.3-70b-versatile'}
-                onBlur={(e) => AIConfigService.set('groq_model', e.target.value)}
-                className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg font-mono-label text-mono-label focus:ring-2 focus:ring-secondary outline-none"
+                value={aiModel}
+                onChange={(e) => setAiModel(e.target.value)}
+                onBlur={(e) => {
+                  if (!locked) AIConfigService.set('groq_model', e.target.value)
+                }}
+                disabled={locked}
+                className={`${inputCls} font-mono-label text-mono-label`}
               />
             </div>
 
-            <div className={`p-sm rounded-lg flex items-start gap-sm ${
-              connStatus === 'ok'
-                ? 'bg-emerald-50 border border-emerald-200'
-                : connStatus === 'fail'
-                ? 'bg-error-container border border-error'
-                : 'bg-surface-container'
-            }`}>
-              <span className={`material-symbols-outlined text-[18px] ${
-                connStatus === 'ok' ? 'text-emerald-600' : connStatus === 'fail' ? 'text-error' : 'text-secondary'
-              }`}>
+            <div
+              className={`p-sm rounded-lg flex items-start gap-sm ${
+                connStatus === 'ok'
+                  ? 'bg-brand-soft border border-brand-accent/30'
+                  : connStatus === 'fail'
+                  ? 'bg-error-container border border-error'
+                  : 'bg-surface-container'
+              }`}
+            >
+              <span
+                className={`material-symbols-outlined text-[18px] ${
+                  connStatus === 'ok' ? 'text-brand-mid' : connStatus === 'fail' ? 'text-error' : 'text-brand-mid'
+                }`}
+              >
                 {connStatus === 'ok' ? 'check_circle' : connStatus === 'fail' ? 'error' : 'info'}
               </span>
               <p className="text-body-md text-on-surface-variant">
@@ -318,51 +575,110 @@ const Settings: React.FC = () => {
                   ? 'Koneksi n8n berhasil!'
                   : connStatus === 'fail'
                   ? 'Koneksi gagal. Pastikan n8n aktif dan URL benar.'
-                  : 'URL ini digunakan untuk komunikasi 2 arah antara dashboard dan workflow n8n Syifa.'}
+                  : 'URL ini dipakai untuk komunikasi 2 arah antara dashboard dan workflow n8n Syifa.'}
               </p>
             </div>
 
             <button
               onClick={testConnection}
-              disabled={testingConn}
-              className="w-full py-3 border border-outline-variant rounded-lg text-body-md font-bold hover:bg-surface-container transition-colors flex items-center justify-center gap-sm disabled:opacity-50"
+              disabled={testingConn || locked}
+              className="w-full py-3 border border-outline-variant rounded-lg text-body-md font-bold hover:bg-surface-container transition-colors flex items-center justify-center gap-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className={`material-symbols-outlined text-[18px] ${testingConn ? 'animate-spin' : ''}`}>
                 sync
               </span>
               {testingConn ? 'Testing...' : 'Test Connection'}
             </button>
-
-            {/* Workflow endpoints reference */}
-            <div className="border-t border-outline-variant pt-md">
-              <h4 className="font-label-caps text-label-caps text-outline uppercase mb-sm">
-                Workflow Endpoints (n8n)
-              </h4>
-              <ul className="space-y-1 text-[11px] font-mono-label">
-                {[
-                  { wf: 'WF1', label: 'Incoming WA Trigger', path: '(Meta WhatsApp Cloud webhook)' },
-                  { wf: 'WF2', label: 'Auto Estimator', path: '/wa-estimator' },
-                  { wf: 'WF3', label: 'Proposal Generator', path: '/wa-proposal' },
-                  { wf: 'WF4', label: 'Supabase Sync Hub', path: '/incoming-conversation' },
-                  { wf: 'WF0', label: 'Dashboard → Client (manual)', path: '/dashboard-message' },
-                  { wf: '—', label: 'Toggle AI/Manual mode', path: '/toggle-mode' },
-                ].map((row) => (
-                  <li
-                    key={row.wf + row.path}
-                    className="flex items-start justify-between gap-sm py-1 border-b border-outline-variant/40 last:border-0"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-bold text-on-background">{row.wf}</span>{' '}
-                      <span className="text-on-surface-variant">{row.label}</span>
-                    </div>
-                    <span className="text-outline truncate">{row.path}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
           </div>
         </div>
       </div>
+
+      {/* ── PIN modal ───────────────────────────────────────── */}
+      {pinModal && (
+        <div
+          className="fixed inset-0 z-50 bg-brand-dark/50 flex items-center justify-center p-4"
+          onClick={() => setPinModal(null)}
+        >
+          <div
+            className="bg-surface rounded-2xl shadow-soft-md w-full max-w-sm p-md animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-md">
+              <h3 className="text-headline-sm font-semibold">
+                {pinModal === 'unlock' ? 'Masukkan PIN' : hasPin ? 'Ubah PIN' : 'Atur PIN'}
+              </h3>
+              <button
+                onClick={() => setPinModal(null)}
+                className="p-1.5 rounded-lg hover:bg-surface-container text-on-surface-variant"
+                aria-label="Tutup"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {pinModal === 'unlock' ? (
+              <div className="space-y-sm">
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  autoFocus
+                  value={pinInput}
+                  onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onKeyDown={(e) => e.key === 'Enter' && submitUnlock()}
+                  placeholder="PIN"
+                  className={`${inputCls} tracking-[0.5em] text-center text-lg`}
+                />
+                {pinError && <p className="text-[12.5px] text-error font-medium">{pinError}</p>}
+                <button
+                  onClick={submitUnlock}
+                  className="w-full py-2.5 bg-brand text-white rounded-lg font-bold hover:opacity-90"
+                >
+                  Buka
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-sm">
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  autoFocus
+                  value={pinNew}
+                  onChange={(e) => setPinNew(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="PIN baru (4–6 digit)"
+                  className={`${inputCls} tracking-[0.5em] text-center text-lg`}
+                />
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  value={pinConfirm}
+                  onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="Konfirmasi PIN"
+                  className={`${inputCls} tracking-[0.5em] text-center text-lg`}
+                />
+                {pinError && <p className="text-[12.5px] text-error font-medium">{pinError}</p>}
+                <div className="flex gap-sm">
+                  {hasPin && (
+                    <button
+                      onClick={removePin}
+                      disabled={savingPin}
+                      className="py-2.5 px-md border border-error/40 text-error rounded-lg font-bold hover:bg-error-container disabled:opacity-50"
+                    >
+                      Hapus
+                    </button>
+                  )}
+                  <button
+                    onClick={savePin}
+                    disabled={savingPin}
+                    className="flex-1 py-2.5 bg-brand text-white rounded-lg font-bold hover:opacity-90 disabled:opacity-50"
+                  >
+                    {savingPin ? 'Menyimpan...' : 'Simpan PIN'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

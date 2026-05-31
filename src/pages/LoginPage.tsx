@@ -32,21 +32,23 @@ const LoginPage: React.FC<Props> = ({ onSuccess }) => {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (loading) return
     setError('')
     setLoading(true)
-    // Small delay for natural feedback
-    setTimeout(() => {
-      const result = authService.login(email, password)
+    try {
+      const result = await authService.login(email, password)
       if (result.ok) {
         onSuccess()
       } else {
         setError(result.error || 'Gagal masuk.')
         setLoading(false)
       }
-    }, 300)
+    } catch {
+      setError('Terjadi kesalahan. Coba lagi.')
+      setLoading(false)
+    }
   }
 
   return (
@@ -176,9 +178,7 @@ const LoginPage: React.FC<Props> = ({ onSuccess }) => {
           </form>
 
           <p className="text-[11px] text-white/25 text-center mt-6 leading-relaxed">
-            Demo login · {authService.defaultEmail} / sudutruang
-            <br />
-            Sudut Ruang AI Ecosystem v1.0
+            Sudut Ruang AI Ecosystem v1.0 · Secure Login
           </p>
         </div>
       </div>
