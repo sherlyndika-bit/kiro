@@ -17,6 +17,10 @@ interface SidebarProps {
   onMobileClose: () => void
   /** Optional unread badge for the chat menu item */
   chatBadge?: number
+  /** Email of the logged-in operator */
+  userEmail?: string
+  /** Logout handler */
+  onLogout?: () => void
 }
 
 interface MenuItem {
@@ -72,6 +76,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   isMobileOpen,
   onMobileClose,
   chatBadge = 0,
+  userEmail,
+  onLogout,
 }) => {
   // Close drawer on Escape (mobile)
   useEffect(() => {
@@ -191,12 +197,20 @@ const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <div className="flex items-center gap-sm">
             <div className="w-8 h-8 rounded-full bg-brand-accent flex items-center justify-center text-[12px] font-semibold text-white flex-shrink-0">
-              SR
+              {(userEmail || 'SR').charAt(0).toUpperCase()}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-white/85 truncate">Admin Studio</p>
-              <p className="text-[11px] text-white/40 truncate">Owner</p>
+              <p className="text-[11px] text-white/40 truncate">{userEmail || 'Owner'}</p>
             </div>
+            <button
+              onClick={onLogout}
+              className="p-2 rounded-lg text-white/45 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
+              aria-label="Keluar"
+              title="Keluar"
+            >
+              <span className="material-symbols-outlined text-[20px]">logout</span>
+            </button>
           </div>
         </div>
       </aside>

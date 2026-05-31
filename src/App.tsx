@@ -7,7 +7,9 @@ import Pipeline from './pages/Pipeline'
 import Estimator from './pages/Estimator'
 import AIStudio from './pages/AIStudio'
 import Settings from './pages/Settings'
+import LoginPage from './pages/LoginPage'
 import { supabase } from './services/supabaseClient'
+import { authService } from './services/auth'
 
 type PageType =
   | 'dashboard'
@@ -69,13 +71,19 @@ class PageErrorBoundary extends Component<
 }
 
 function App() {
+  const [authed, setAuthed] = useState<boolean>(() => authService.isAuthenticated())
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard')
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [chatBadge, setChatBadge] = useState(0)
+  const [chatSearch, setChatSearch] = useState('')
+  const [chatSearchNonce, setChatSearchNonce] = useState(0)
   const badgePoll = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Lightweight poll for total unread conversations (sidebar badge)
+  const session = authService.getSession()
+
+  // Lightweight poll for total unread conversations (sidebar/topbar badge)
   useEffect(() => {
+    if (!authed) return
     const loadBadge = async () => {
       const { data } = await supabase
         .from('conversations')
@@ -88,14 +96,31 @@ function App() {
     return () => {
       if (badgePoll.current) clearInterval(badgePoll.current)
     }
-  }, [])
+  }, [authed])
+
+  const handleLogout = () => {
+    authService.logout()
+    setAuthed(false)
+    setCurrentPage('dashboard')
+    setIsSidebarOpen(false)
+  }
+
+  const handleTopbarSearch = (query: string) => {
+    setChatSearch(query)
+    setChatSearchNonce((n) => n + 1)
+    setCurrentPage('chat-monitoring')
+  }
+
+  if (!authed) {
+    return <LoginPage onSuccess={() => setAuthed(true)} />
+  }
 
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
         return <Dashboard onNavigate={setCurrentPage} />
       case 'chat-monitoring':
-        return <ChatMonitoring />
+        return <ChatMonitoring initialSearch={chatSearch} searchNonce={chatSearchNonce} />
       case 'pipeline':
         return <Pipeline />
       case 'estimator':
@@ -120,9 +145,17 @@ function App() {
         isMobileOpen={isSidebarOpen}
         onMobileClose={() => setIsSidebarOpen(false)}
         chatBadge={chatBadge}
+        userEmail={session?.email}
+        onLogout={handleLogout}
       />
       <main className="md:ml-[264px] h-full flex flex-col min-h-0">
-        <TopBar title={pageTitles[currentPage]} onMobileMenuClick={() => setIsSidebarOpen(true)} />
+        <TopBar
+          title={pageTitles[currentPage]}
+          onMobileMenuClick={() => setIsSidebarOpen(true)}
+          onSearch={handleTopbarSearch}
+          onBell={() => setCurrentPage('chat-monitoring')}
+          chatBadge={chatBadge}
+        />
         <div className="flex-1 min-h-0 overflow-hidden">
           <PageErrorBoundary pageKey={currentPage}>
             {isFullscreenPage ? (

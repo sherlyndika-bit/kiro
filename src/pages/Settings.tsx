@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
-import { AIConfigService } from '../services/supabaseClient'
+import { AIConfigService, supabase } from '../services/supabaseClient'
 import { n8nService } from '../services/n8nWebhookService'
+
+type ConnState = 'idle' | 'ok' | 'fail'
 
 const Settings: React.FC = () => {
   const [config, setConfig] = useState<Record<string, string>>({})
@@ -9,6 +11,13 @@ const Settings: React.FC = () => {
   const [saved, setSaved] = useState(false)
   const [testingConn, setTestingConn] = useState(false)
   const [connStatus, setConnStatus] = useState<'idle' | 'ok' | 'fail'>('idle')
+
+  // Live integration health
+  const [conn, setConn] = useState<{ n8n: ConnState; supabase: ConnState }>({
+    n8n: 'idle',
+    supabase: 'idle',
+  })
+  const [checking, setChecking] = useState(false)
 
   // Company profile state (dari ai_config)
   const [companyName, setCompanyName] = useState('Sudut Ruang')
@@ -30,6 +39,20 @@ const Settings: React.FC = () => {
     loadConfig()
   }, [])
 
+  const checkConnections = async () => {
+    setChecking(true)
+    setConn({ n8n: 'idle', supabase: 'idle' })
+    const [n8nOk, supabaseOk] = await Promise.all([
+      n8nService.ping(5000),
+      (async () => {
+        const { error } = await supabase.from('ai_config').select('key').limit(1)
+        return !error
+      })(),
+    ])
+    setConn({ n8n: n8nOk ? 'ok' : 'fail', supabase: supabaseOk ? 'ok' : 'fail' })
+    setChecking(false)
+  }
+
   const loadConfig = async () => {
     const cfg = await AIConfigService.getAll()
     setConfig(cfg)
@@ -50,6 +73,7 @@ const Settings: React.FC = () => {
     })
 
     setLoading(false)
+    checkConnections()
   }
 
   const saveProfile = async () => {
@@ -90,11 +114,17 @@ const Settings: React.FC = () => {
     { key: 'confidence_alerts' as const, name: 'Confidence Alerts', desc: 'Alert ketika AI butuh bantuan human' },
   ]
 
-  const integrations = [
-    { icon: 'chat', name: 'WhatsApp Business', status: 'Connected', active: true },
-    { icon: 'photo_camera', name: 'Instagram', status: 'Connected', active: true },
-    { icon: 'mail', name: 'Email (Gmail)', status: 'Not Connected', active: false },
-    { icon: 'account_tree', name: 'n8n Workflow', status: 'Active', active: true },
+  const connMeta: Record<ConnState, { label: string; dot: string; text: string }> = {
+    idle: { label: 'Memeriksa…', dot: 'bg-outline animate-pulse', text: 'text-outline' },
+    ok: { label: 'Terhubung', dot: 'bg-brand-accent', text: 'text-brand-mid' },
+    fail: { label: 'Tidak terhubung', dot: 'bg-error', text: 'text-error' },
+  }
+
+  const integrations: Array<{ icon: string; name: string; detail: string; state: ConnState }> = [
+    { icon: 'chat', name: 'WhatsApp Business', detail: 'via n8n', state: conn.n8n },
+    { icon: 'photo_camera', name: 'Instagram', detail: 'via n8n', state: conn.n8n },
+    { icon: 'account_tree', name: 'n8n Workflow', detail: 'Webhook engine', state: conn.n8n },
+    { icon: 'database', name: 'Supabase', detail: 'Database', state: conn.supabase },
   ]
 
   return (
@@ -200,31 +230,45 @@ const Settings: React.FC = () => {
 
         {/* Integrations */}
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
-          <h3 className="font-headline-sm text-headline-sm font-bold mb-md">Integrasi</h3>
+          <div className="flex items-center justify-between mb-md">
+            <h3 className="font-headline-sm text-headline-sm font-bold">Integrasi</h3>
+            <button
+              onClick={checkConnections}
+              disabled={checking}
+              className="flex items-center gap-xs text-label-caps font-bold text-secondary uppercase disabled:opacity-50"
+            >
+              <span className={`material-symbols-outlined text-[16px] ${checking ? 'animate-spin' : ''}`}>
+                sync
+              </span>
+              {checking ? 'Memeriksa' : 'Periksa Ulang'}
+            </button>
+          </div>
           <div className="space-y-sm">
-            {integrations.map((int) => (
-              <div
-                key={int.name}
-                className="flex items-center justify-between p-sm border border-outline-variant rounded-lg"
-              >
-                <div className="flex items-center gap-sm">
-                  <div className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center">
-                    <span className="material-symbols-outlined text-primary text-[18px]">
-                      {int.icon}
-                    </span>
+            {integrations.map((int) => {
+              const m = connMeta[int.state]
+              return (
+                <div
+                  key={int.name}
+                  className="flex items-center justify-between p-sm border border-outline-variant rounded-lg"
+                >
+                  <div className="flex items-center gap-sm min-w-0">
+                    <div className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center flex-shrink-0">
+                      <span className="material-symbols-outlined text-primary text-[18px]">
+                        {int.icon}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-body-md font-bold truncate">{int.name}</p>
+                      <p className="text-label-caps text-outline truncate">{int.detail}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-body-md font-bold">{int.name}</p>
-                    <p className={`text-label-caps ${int.active ? 'text-emerald-600' : 'text-outline'}`}>
-                      {int.status}
-                    </p>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <span className={`w-2 h-2 rounded-full ${m.dot}`} />
+                    <span className={`text-label-caps font-bold ${m.text}`}>{m.label}</span>
                   </div>
                 </div>
-                <button className="text-label-caps font-bold text-secondary uppercase">
-                  {int.active ? 'Configure' : 'Connect'}
-                </button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
 

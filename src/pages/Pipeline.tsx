@@ -22,6 +22,19 @@ const Pipeline: React.FC = () => {
   const [clients, setClients] = useState<DBClient[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Add-client modal
+  const emptyForm = {
+    name: '',
+    phone: '',
+    building_type: '',
+    tier: '',
+    area_sqm: '',
+    source: 'dashboard',
+  }
+  const [addStage, setAddStage] = useState<string | null>(null)
+  const [form, setForm] = useState(emptyForm)
+  const [saving, setSaving] = useState(false)
+
   useEffect(() => {
     loadClients()
   }, [])
@@ -30,6 +43,33 @@ const Pipeline: React.FC = () => {
     const data = await ClientService.getAll()
     setClients(data)
     setLoading(false)
+  }
+
+  const openAdd = (stage: string) => {
+    setForm(emptyForm)
+    setAddStage(stage)
+  }
+
+  const handleAddClient = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!addStage || saving) return
+    setSaving(true)
+    const phone = form.phone.replace(/[^\d]/g, '')
+    const id = phone || `client_${Date.now()}`
+    await ClientService.upsert({
+      id,
+      name: form.name.trim() || 'Klien Baru',
+      phone: phone || null,
+      source: form.source || 'dashboard',
+      status: addStage,
+      building_type: form.building_type.trim() || null,
+      tier: form.tier.trim() || null,
+      area_sqm: form.area_sqm ? parseFloat(form.area_sqm) : null,
+      last_contact_at: new Date().toISOString(),
+    })
+    setSaving(false)
+    setAddStage(null)
+    loadClients()
   }
 
   const clientsByStage = statusStages.reduce((acc, stage) => {
@@ -142,7 +182,10 @@ const Pipeline: React.FC = () => {
 
                     {/* Tombol tambah */}
                     <div className="mt-auto pt-sm">
-                      <button className="w-full py-2 border-2 border-dashed border-outline-variant rounded-lg text-outline hover:border-primary hover:text-primary transition-colors text-body-md">
+                      <button
+                        onClick={() => openAdd(stage)}
+                        className="w-full py-2 border-2 border-dashed border-outline-variant rounded-lg text-outline hover:border-brand-accent hover:text-brand-mid transition-colors text-body-md"
+                      >
                         + Tambah
                       </button>
                     </div>
@@ -151,6 +194,127 @@ const Pipeline: React.FC = () => {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Add-client modal */}
+      {addStage && (
+        <div
+          className="fixed inset-0 z-50 bg-brand-dark/50 flex items-center justify-center p-4"
+          onClick={() => setAddStage(null)}
+        >
+          <div
+            className="bg-surface rounded-2xl shadow-soft-md w-full max-w-md p-md animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-md">
+              <h3 className="text-headline-sm font-semibold">
+                Tambah Client — {stageConfig[addStage]?.label}
+              </h3>
+              <button
+                onClick={() => setAddStage(null)}
+                className="p-1.5 rounded-lg hover:bg-surface-container text-on-surface-variant"
+                aria-label="Tutup"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleAddClient} className="space-y-sm">
+              <div>
+                <label className="text-[11px] font-semibold text-outline uppercase tracking-wide block mb-1.5">
+                  Nama Client *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Contoh: Bpk. Budi"
+                  className="w-full px-md py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-brand-accent outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-outline uppercase tracking-wide block mb-1.5">
+                  Nomor WhatsApp
+                </label>
+                <input
+                  type="tel"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  placeholder="Contoh: 6281234567890"
+                  className="w-full px-md py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-brand-accent outline-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-sm">
+                <div>
+                  <label className="text-[11px] font-semibold text-outline uppercase tracking-wide block mb-1.5">
+                    Tipe Bangunan
+                  </label>
+                  <input
+                    type="text"
+                    value={form.building_type}
+                    onChange={(e) => setForm({ ...form, building_type: e.target.value })}
+                    placeholder="Rumah Tinggal"
+                    className="w-full px-md py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-brand-accent outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-outline uppercase tracking-wide block mb-1.5">
+                    Luas (m²)
+                  </label>
+                  <input
+                    type="number"
+                    value={form.area_sqm}
+                    onChange={(e) => setForm({ ...form, area_sqm: e.target.value })}
+                    placeholder="100"
+                    className="w-full px-md py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-brand-accent outline-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-outline uppercase tracking-wide block mb-1.5">
+                  Sumber
+                </label>
+                <select
+                  value={form.source}
+                  onChange={(e) => setForm({ ...form, source: e.target.value })}
+                  className="w-full px-md py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-brand-accent outline-none"
+                >
+                  <option value="dashboard">Dashboard</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="referral">Referral</option>
+                </select>
+              </div>
+
+              <div className="flex gap-sm pt-1">
+                <button
+                  type="button"
+                  onClick={() => setAddStage(null)}
+                  className="flex-1 py-2.5 border border-outline-variant rounded-lg font-bold hover:bg-surface-container transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 py-2.5 bg-brand text-white rounded-lg font-bold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-xs"
+                >
+                  {saving ? (
+                    <>
+                      <span className="material-symbols-outlined text-[18px] animate-spin">
+                        progress_activity
+                      </span>
+                      Menyimpan...
+                    </>
+                  ) : (
+                    'Simpan'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
