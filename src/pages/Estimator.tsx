@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   constructionRates,
   designServiceRates,
@@ -8,8 +8,10 @@ import {
   formatIDR,
   formatIDRShort,
 } from '../services/pricingService'
-import { ClientService, DocumentService } from '../services/supabaseClient'
+import { AIConfigService, ClientService, DocumentService } from '../services/supabaseClient'
 import { n8nService } from '../services/n8nWebhookService'
+import ProposalPreviewModal from '../components/ProposalPreviewModal'
+import { ProposalData, defaultTimeline } from '../services/proposalTemplate'
 
 const Estimator: React.FC = () => {
   // Step 1: RAB Konstruksi
@@ -32,6 +34,28 @@ const Estimator: React.FC = () => {
   const [sendingWA, setSendingWA] = useState(false)
   const [sentWA, setSentWA] = useState(false)
   const [generatingPDF, setGeneratingPDF] = useState(false)
+
+  // Proposal preview
+  const [showProposal, setShowProposal] = useState(false)
+  const [savingProposal, setSavingProposal] = useState(false)
+  const [savedProposal, setSavedProposal] = useState(false)
+  const [company, setCompany] = useState({
+    name: 'Sudut Ruang Arsitek',
+    locations: 'Surabaya | Bali | IKN',
+    phone: '+62 851 7700 0990',
+    logo: '',
+  })
+
+  useEffect(() => {
+    AIConfigService.getAll().then((cfg) => {
+      setCompany({
+        name: cfg.company_name || 'Sudut Ruang Arsitek',
+        locations: cfg.company_locations || 'Surabaya | Bali | IKN',
+        phone: cfg.company_phone || '+62 851 7700 0990',
+        logo: cfg.company_logo || '',
+      })
+    })
+  }, [])
 
   const selectedConstruction = useMemo(
     () => constructionRates.find((r) => r.id === constructionId),
@@ -236,6 +260,100 @@ Mau kita buatkan proposal lengkap?`
     alert(
       `Proposal ${proposalNo} tersimpan sebagai draft di Documents.${n8nMsg}\nBuka tab AI Studio → Documents untuk melihatnya.`,
     )
+  }
+
+  // Build proposal data from the current estimate for preview / print / save.
+  const proposalNoRef = useMemo(() => `PROP-${Date.now()}`, [clientName, projectName, constructionId, area, serviceId])
+
+  const buildProposalData = (): ProposalData | null => {
+    if (!rab || !fee) return null
+    const tierLabel = selectedConstruction
+      ? `${selectedConstruction.type} — ${selectedConstruction.tier}`
+      : ''
+    const now = new Date()
+    const dateLabel = now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+
+    return {
+      proposalNo: proposalNoRef,
+      dateLabel,
+      confidentialNote: `Confidential & Proprietary • ${dateLabel}`,
+      projectTitle: projectName || selectedConstruction?.type || 'Proyek',
+      projectTitleAccent: '',
+      subtitle: tierLabel,
+      preparedFor: clientName || 'Calon Klien',
+      metaSmall: `Luas: ${area} m²${clientPhone ? ` | WA: ${clientPhone}` : ''} | Studio: ${company.name}`,
+      currency: 'IDR',
+      taxRate: 0.11,
+      summaryTitle: 'Executive Summary',
+      summaryCards: [
+        {
+          title: 'Ruang Lingkup',
+          body: `${selectedService?.serviceName || 'Jasa Desain'} untuk ${selectedConstruction?.type || 'proyek'} seluas ${area} m².`,
+        },
+        {
+          title: 'Spesifikasi',
+          body: selectedConstruction?.specification || 'Sesuai kesepakatan dan hasil survey lokasi.',
+        },
+      ],
+      paletteTitle: 'Material & Color Direction',
+      paletteIntro: '',
+      palette: [],
+      timelineTitle: 'Timeline Kerja',
+      timeline: defaultTimeline(),
+      pricingTitle: 'Rincian Anggaran Fee Konsultan',
+      lineItems: [
+        {
+          description: `Estimasi RAB Konstruksi — ${tierLabel}`,
+          volume: `${area} m²`,
+          qty: 1,
+          unitPrice: rab.rabAvg,
+        },
+        {
+          description: selectedService?.serviceName || 'Fee Jasa Desain',
+          volume: '1 Paket',
+          qty: 1,
+          unitPrice: fee.feeAvg,
+        },
+      ],
+      notes:
+        'Angka di atas merupakan estimasi awal dan dapat berubah setelah survey lokasi dan diskusi detail. Proposal berlaku 14 hari sejak diterbitkan.',
+      company,
+    }
+  }
+
+  const proposalData = showProposal ? buildProposalData() : null
+
+  const handleSaveProposalDoc = async () => {
+    if (!rab || !fee) return
+    setSavingProposal(true)
+    const normalizedPhone = clientPhone.replace(/[^\d]/g, '')
+    await DocumentService.insert({
+      conversation_id: null,
+      client_phone: normalizedPhone || null,
+      client_name: clientName || 'Klien',
+      type: 'proposal',
+      status: 'draft',
+      file_url: null,
+      proposal_no: proposalNoRef,
+      data: {
+        constructionId,
+        area: parseFloat(area),
+        rabAvg: rab.rabAvg,
+        serviceId,
+        feeAvg: fee.feeAvg,
+        ppn: fee.ppn,
+        totalAvg: fee.totalAvg,
+        clientName,
+        projectName,
+        currency: 'IDR',
+        generatedAt: new Date().toISOString(),
+      },
+      sent_at: null,
+      valid_until: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+    })
+    setSavingProposal(false)
+    setSavedProposal(true)
+    setTimeout(() => setSavedProposal(false), 3000)
   }
 
   return (
@@ -538,16 +656,23 @@ Mau kita buatkan proposal lengkap?`
               Draft AI
             </span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-sm">
+            <button
+              onClick={() => setShowProposal(true)}
+              className="flex items-center justify-center gap-sm py-3 bg-primary text-on-primary rounded-lg font-bold hover:opacity-90 active:scale-95 transition-all md:col-span-2"
+            >
+              <span className="material-symbols-outlined">visibility</span>
+              Preview & Cetak Proposal (PDF)
+            </button>
             <button
               onClick={handleGeneratePDF}
               disabled={generatingPDF}
-              className="flex items-center justify-center gap-sm py-3 bg-primary text-on-primary rounded-lg font-bold hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
+              className="flex items-center justify-center gap-sm py-3 border border-outline-variant rounded-lg font-bold hover:bg-surface-container transition-colors disabled:opacity-50"
             >
               <span className="material-symbols-outlined">
-                {generatingPDF ? 'hourglass_empty' : 'picture_as_pdf'}
+                {generatingPDF ? 'hourglass_empty' : 'rocket_launch'}
               </span>
-              {generatingPDF ? 'Generating...' : 'Generate Proposal PDF'}
+              {generatingPDF ? 'Memproses...' : 'Kirim ke n8n (WF3)'}
             </button>
             <button
               onClick={handleSendWA}
@@ -557,12 +682,12 @@ Mau kita buatkan proposal lengkap?`
               <span className="material-symbols-outlined">
                 {sendingWA ? 'hourglass_empty' : 'chat'}
               </span>
-              {sentWA ? '✓ Terkirim!' : sendingWA ? 'Mengirim...' : 'Send via WhatsApp'}
+              {sentWA ? '✓ Terkirim!' : sendingWA ? 'Mengirim...' : 'Kirim Estimasi via WA'}
             </button>
             <button
               onClick={handleSaveCRM}
               disabled={savingCRM}
-              className="flex items-center justify-center gap-sm py-3 border border-outline-variant rounded-lg font-bold hover:bg-surface-container transition-colors disabled:opacity-50"
+              className="flex items-center justify-center gap-sm py-3 border border-outline-variant rounded-lg font-bold hover:bg-surface-container transition-colors disabled:opacity-50 md:col-span-2"
             >
               <span className="material-symbols-outlined">
                 {savingCRM ? 'hourglass_empty' : 'save'}
@@ -571,6 +696,16 @@ Mau kita buatkan proposal lengkap?`
             </button>
           </div>
         </div>
+      )}
+
+      {showProposal && proposalData && (
+        <ProposalPreviewModal
+          data={proposalData}
+          onClose={() => setShowProposal(false)}
+          onSave={handleSaveProposalDoc}
+          saving={savingProposal}
+          saved={savedProposal}
+        />
       )}
     </div>
   )
