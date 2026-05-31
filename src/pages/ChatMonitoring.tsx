@@ -685,38 +685,6 @@ const ChatMonitoring: React.FC<ChatMonitoringProps> = ({ initialSearch, searchNo
                 </div>
                 <p className="text-[11px] text-outline mt-1">Rata-rata semua balasan AI</p>
               </div>
-
-              {/* Integrations */}
-              <div className="bg-background rounded-xl p-md border border-outline-variant space-y-sm">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-outline">
-                  Integrasi
-                </p>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-xs">
-                    <div className="w-7 h-7 rounded bg-brand text-white flex items-center justify-center font-black italic text-[9px]">
-                      n8n
-                    </div>
-                    <span className="text-[13px] font-medium">n8n Webhook</span>
-                  </div>
-                  <span className="flex items-center gap-1 text-[11px] font-semibold text-brand-mid">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand-accent" /> Terhubung
-                  </span>
-                </div>
-                <div className="bg-surface-container rounded p-2 font-mono-label text-[10px] text-outline truncate">
-                  {n8nService.getBaseUrl()}
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-xs">
-                    <div className="w-7 h-7 rounded bg-brand-mid text-white flex items-center justify-center font-black text-[9px]">
-                      SB
-                    </div>
-                    <span className="text-[13px] font-medium">Supabase</span>
-                  </div>
-                  <span className="flex items-center gap-1 text-[11px] font-semibold text-brand-mid">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand-accent animate-pulse" /> Polling
-                  </span>
-                </div>
-              </div>
             </>
           ) : (
             <p className="text-body-md text-outline text-center mt-lg">Pilih percakapan</p>
