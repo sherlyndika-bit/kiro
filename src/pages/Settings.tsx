@@ -1,17 +1,22 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { AIConfigService, supabase } from '../services/supabaseClient'
 import { n8nService } from '../services/n8nWebhookService'
 import { authService } from '../services/auth'
+import PinLock from '../components/PinLock'
 
 type ConnState = 'idle' | 'ok' | 'fail'
 
-const Settings: React.FC = () => {
-  const [config, setConfig] = useState<Record<string, string>>({})
+interface SettingsProps {
+  /** Notify the app shell when the logo changes so it can update live */
+  onLogoChange?: (logo: string) => void
+}
+
+const Settings: React.FC<SettingsProps> = ({ onLogoChange }) => {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [testingConn, setTestingConn] = useState(false)
-  const [connStatus, setConnStatus] = useState<'idle' | 'ok' | 'fail'>('idle')
+  const [connStatus, setConnStatus] = useState<ConnState>('idle')
 
   // Live integration health
   const [conn, setConn] = useState<{ n8n: ConnState; supabase: ConnState }>({
@@ -20,16 +25,18 @@ const Settings: React.FC = () => {
   })
   const [checking, setChecking] = useState(false)
 
-  // Company profile state (dari ai_config)
+  // Company profile
   const [companyName, setCompanyName] = useState('Sudut Ruang')
   const [companyEmail, setCompanyEmail] = useState('hello@sudutruang.id')
   const [companyPhone, setCompanyPhone] = useState('+62 812-3456-7890')
+  const [logo, setLogo] = useState('')
   const [webhookUrl, setWebhookUrl] = useState(
     n8nService.getBaseUrl() || 'https://n8n.srv1696073.hstgr.cloud/webhook',
   )
   const [aiModel, setAiModel] = useState('llama-3.3-70b-versatile')
+  const logoInputRef = useRef<HTMLInputElement>(null)
 
-  // AI toggles state
+  // AI toggles
   const [aiToggles, setAiToggles] = useState({
     auto_reply_enabled: true,
     smart_estimator: true,
@@ -37,23 +44,16 @@ const Settings: React.FC = () => {
     confidence_alerts: true,
   })
 
-  // ── Settings lock + PIN ──────────────────────────────────────
+  // Settings lock (PIN handled by <PinLock/>)
   const [locked, setLocked] = useState(true)
-  const [pinModal, setPinModal] = useState<null | 'unlock' | 'set'>(null)
-  const [pinInput, setPinInput] = useState('')
-  const [pinNew, setPinNew] = useState('')
-  const [pinConfirm, setPinConfirm] = useState('')
-  const [pinError, setPinError] = useState('')
-  const [savingPin, setSavingPin] = useState(false)
 
-  // ── Account / password ───────────────────────────────────────
+  // Account / password
   const [curPwd, setCurPwd] = useState('')
   const [newPwd, setNewPwd] = useState('')
   const [confirmPwd, setConfirmPwd] = useState('')
   const [savingPwd, setSavingPwd] = useState(false)
   const [pwdMsg, setPwdMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
-  const hasPin = !!config.settings_pin
   const sessionEmail = authService.getSession()?.email || authService.defaultEmail
   const canManagePassword = authService.canManagePassword()
 
@@ -77,11 +77,11 @@ const Settings: React.FC = () => {
 
   const loadConfig = async () => {
     const cfg = await AIConfigService.getAll()
-    setConfig(cfg)
 
     if (cfg.company_name) setCompanyName(cfg.company_name)
     if (cfg.company_email) setCompanyEmail(cfg.company_email)
     if (cfg.company_phone) setCompanyPhone(cfg.company_phone)
+    if (cfg.company_logo) setLogo(cfg.company_logo)
     if (cfg.groq_model) setAiModel(cfg.groq_model)
     if (cfg.webhook_url) {
       setWebhookUrl(cfg.webhook_url)
@@ -114,6 +114,34 @@ const Settings: React.FC = () => {
     setTimeout(() => setSaved(false), 2000)
   }
 
+  const onLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      alert('File harus berupa gambar.')
+      return
+    }
+    if (file.size > 400 * 1024) {
+      alert('Ukuran logo maksimal 400KB. Kompres dulu ya.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = async () => {
+      const dataUrl = String(reader.result)
+      setLogo(dataUrl)
+      await AIConfigService.set('company_logo', dataUrl)
+      onLogoChange?.(dataUrl)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const removeLogo = async () => {
+    setLogo('')
+    await AIConfigService.set('company_logo', '')
+    onLogoChange?.('')
+  }
+
   const toggleAI = async (key: keyof typeof aiToggles) => {
     if (locked) return
     const newVal = !aiToggles[key]
@@ -130,59 +158,6 @@ const Settings: React.FC = () => {
     setTestingConn(false)
   }
 
-  // ── Lock handlers ────────────────────────────────────────────
-  const requestUnlock = () => {
-    setPinError('')
-    setPinInput('')
-    if (hasPin) {
-      setPinModal('unlock')
-    } else {
-      setLocked(false)
-    }
-  }
-
-  const submitUnlock = () => {
-    if (pinInput !== config.settings_pin) {
-      setPinError('PIN salah.')
-      return
-    }
-    setLocked(false)
-    setPinModal(null)
-    setPinInput('')
-  }
-
-  const openSetPin = () => {
-    setPinError('')
-    setPinNew('')
-    setPinConfirm('')
-    setPinModal('set')
-  }
-
-  const savePin = async () => {
-    if (!/^\d{4,6}$/.test(pinNew)) {
-      setPinError('PIN harus 4–6 digit angka.')
-      return
-    }
-    if (pinNew !== pinConfirm) {
-      setPinError('Konfirmasi PIN tidak cocok.')
-      return
-    }
-    setSavingPin(true)
-    await AIConfigService.set('settings_pin', pinNew)
-    setConfig((prev) => ({ ...prev, settings_pin: pinNew }))
-    setSavingPin(false)
-    setPinModal(null)
-  }
-
-  const removePin = async () => {
-    setSavingPin(true)
-    await AIConfigService.set('settings_pin', '')
-    setConfig((prev) => ({ ...prev, settings_pin: '' }))
-    setSavingPin(false)
-    setPinModal(null)
-  }
-
-  // ── Password handler ─────────────────────────────────────────
   const submitChangePwd = async (e: React.FormEvent) => {
     e.preventDefault()
     if (savingPwd) return
@@ -232,7 +207,7 @@ const Settings: React.FC = () => {
       <div>
         <h1 className="font-serif-display text-display-lg text-on-background">Pengaturan</h1>
         <p className="text-body-md text-on-surface-variant">
-          Kelola akun, preferensi, dan integrasi sistem
+          Kelola akun, branding, preferensi, dan integrasi sistem
         </p>
       </div>
 
@@ -252,7 +227,7 @@ const Settings: React.FC = () => {
               <span className="text-body-md truncate">{sessionEmail}</span>
             </div>
             <p className="text-[11px] text-outline mt-1.5">
-              Email diatur lewat env (VITE_DASHBOARD_EMAIL). Hubungi admin untuk mengubahnya.
+              Email diatur lewat env (VITE_DASHBOARD_EMAIL).
             </p>
           </div>
 
@@ -290,11 +265,7 @@ const Settings: React.FC = () => {
               />
             </div>
             {pwdMsg && (
-              <p
-                className={`text-[12.5px] font-medium ${
-                  pwdMsg.type === 'ok' ? 'text-brand-mid' : 'text-error'
-                }`}
-              >
+              <p className={`text-[12.5px] font-medium ${pwdMsg.type === 'ok' ? 'text-brand-mid' : 'text-error'}`}>
                 {pwdMsg.text}
               </p>
             )}
@@ -321,62 +292,18 @@ const Settings: React.FC = () => {
         </div>
       </div>
 
-      {/* ── Lock banner ─────────────────────────────────────── */}
-      <div
-        className={`rounded-2xl p-md border flex flex-col sm:flex-row sm:items-center gap-sm ${
-          locked ? 'bg-amber-soft border-amber/30' : 'bg-brand-soft border-brand-accent/30'
-        }`}
-      >
-        <span
-          className={`material-symbols-outlined text-[24px] ${locked ? 'text-amber' : 'text-brand-mid'}`}
-        >
-          {locked ? 'lock' : 'lock_open'}
-        </span>
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-on-surface">
-            {locked ? 'Pengaturan sensitif terkunci' : 'Mode edit aktif'}
-          </p>
-          <p className="text-[12.5px] text-on-surface-variant">
-            {locked
-              ? 'Konfigurasi AI & webhook dikunci untuk mencegah perubahan tak sengaja.'
-              : hasPin
-              ? 'Jangan lupa kunci lagi setelah selesai.'
-              : 'Belum ada PIN. Atur PIN agar pengaturan terlindungi.'}
-          </p>
-        </div>
-        <div className="flex items-center gap-sm flex-shrink-0">
-          {locked ? (
-            <button
-              onClick={requestUnlock}
-              className="py-2 px-md bg-brand text-white rounded-lg font-bold text-[13px] hover:opacity-90 flex items-center gap-xs"
-            >
-              <span className="material-symbols-outlined text-[18px]">lock_open</span>
-              Buka Kunci
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={openSetPin}
-                className="py-2 px-md border border-outline-variant rounded-lg font-bold text-[13px] hover:bg-surface-container"
-              >
-                {hasPin ? 'Ubah PIN' : 'Atur PIN'}
-              </button>
-              <button
-                onClick={() => setLocked(true)}
-                className="py-2 px-md bg-brand text-white rounded-lg font-bold text-[13px] hover:opacity-90 flex items-center gap-xs"
-              >
-                <span className="material-symbols-outlined text-[18px]">lock</span>
-                Kunci
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+      {/* ── Lock banner (shared) ────────────────────────────── */}
+      <PinLock
+        locked={locked}
+        onChange={setLocked}
+        lockedTitle="Pengaturan sensitif terkunci"
+        lockedDesc="Konfigurasi AI & webhook dikunci untuk mencegah perubahan tak sengaja."
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-md">
-        {/* Company Profile */}
+        {/* Company Profile + Logo */}
         <div className="bg-surface border border-outline-variant rounded-2xl p-md">
-          <h3 className="text-headline-sm font-bold mb-md">Profil Perusahaan</h3>
+          <h3 className="text-headline-sm font-bold mb-md">Profil & Branding</h3>
           {loading ? (
             <div className="space-y-sm">
               {[1, 2, 3].map((i) => (
@@ -385,6 +312,45 @@ const Settings: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-md">
+              {/* Logo uploader */}
+              <div>
+                <label className="text-label-caps text-outline uppercase block mb-2">Logo / Foto</label>
+                <div className="flex items-center gap-md">
+                  <div className="w-16 h-16 rounded-2xl bg-surface-container border border-outline-variant flex items-center justify-center overflow-hidden flex-shrink-0">
+                    {logo ? (
+                      <img src={logo} alt="Logo" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="material-symbols-outlined text-outline text-[28px]">image</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-sm">
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={onLogoSelect}
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => logoInputRef.current?.click()}
+                      className="py-2 px-md bg-brand text-white rounded-lg text-[13px] font-bold hover:opacity-90 flex items-center gap-xs"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">upload</span>
+                      Unggah Logo
+                    </button>
+                    {logo && (
+                      <button
+                        onClick={removeLogo}
+                        className="py-2 px-md border border-outline-variant rounded-lg text-[13px] font-bold hover:bg-surface-container"
+                      >
+                        Hapus
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-[11px] text-outline mt-1.5">PNG/JPG, maksimal 400KB. Tampil di sidebar & halaman login.</p>
+              </div>
+
               <div>
                 <label className="text-label-caps text-outline uppercase block mb-2">Nama Perusahaan</label>
                 <input
@@ -499,9 +465,7 @@ const Settings: React.FC = () => {
                 >
                   <div className="flex items-center gap-sm min-w-0">
                     <div className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center flex-shrink-0">
-                      <span className="material-symbols-outlined text-brand-mid text-[18px]">
-                        {int.icon}
-                      </span>
+                      <span className="material-symbols-outlined text-brand-mid text-[18px]">{int.icon}</span>
                     </div>
                     <div className="min-w-0">
                       <p className="text-body-md font-bold truncate">{int.name}</p>
@@ -592,93 +556,6 @@ const Settings: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* ── PIN modal ───────────────────────────────────────── */}
-      {pinModal && (
-        <div
-          className="fixed inset-0 z-50 bg-brand-dark/50 flex items-center justify-center p-4"
-          onClick={() => setPinModal(null)}
-        >
-          <div
-            className="bg-surface rounded-2xl shadow-soft-md w-full max-w-sm p-md animate-scale-up"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-md">
-              <h3 className="text-headline-sm font-semibold">
-                {pinModal === 'unlock' ? 'Masukkan PIN' : hasPin ? 'Ubah PIN' : 'Atur PIN'}
-              </h3>
-              <button
-                onClick={() => setPinModal(null)}
-                className="p-1.5 rounded-lg hover:bg-surface-container text-on-surface-variant"
-                aria-label="Tutup"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            {pinModal === 'unlock' ? (
-              <div className="space-y-sm">
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  autoFocus
-                  value={pinInput}
-                  onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  onKeyDown={(e) => e.key === 'Enter' && submitUnlock()}
-                  placeholder="PIN"
-                  className={`${inputCls} tracking-[0.5em] text-center text-lg`}
-                />
-                {pinError && <p className="text-[12.5px] text-error font-medium">{pinError}</p>}
-                <button
-                  onClick={submitUnlock}
-                  className="w-full py-2.5 bg-brand text-white rounded-lg font-bold hover:opacity-90"
-                >
-                  Buka
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-sm">
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  autoFocus
-                  value={pinNew}
-                  onChange={(e) => setPinNew(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="PIN baru (4–6 digit)"
-                  className={`${inputCls} tracking-[0.5em] text-center text-lg`}
-                />
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  value={pinConfirm}
-                  onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="Konfirmasi PIN"
-                  className={`${inputCls} tracking-[0.5em] text-center text-lg`}
-                />
-                {pinError && <p className="text-[12.5px] text-error font-medium">{pinError}</p>}
-                <div className="flex gap-sm">
-                  {hasPin && (
-                    <button
-                      onClick={removePin}
-                      disabled={savingPin}
-                      className="py-2.5 px-md border border-error/40 text-error rounded-lg font-bold hover:bg-error-container disabled:opacity-50"
-                    >
-                      Hapus
-                    </button>
-                  )}
-                  <button
-                    onClick={savePin}
-                    disabled={savingPin}
-                    className="flex-1 py-2.5 bg-brand text-white rounded-lg font-bold hover:opacity-90 disabled:opacity-50"
-                  >
-                    {savingPin ? 'Menyimpan...' : 'Simpan PIN'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

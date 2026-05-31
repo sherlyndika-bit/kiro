@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { authService } from '../services/auth'
+import { AIConfigService } from '../services/supabaseClient'
 
 interface Props {
   onSuccess: () => void
@@ -31,6 +32,17 @@ const LoginPage: React.FC<Props> = ({ onSuccess }) => {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [logo, setLogo] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    AIConfigService.get('company_logo').then((v) => {
+      if (alive && v) setLogo(v)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -71,8 +83,8 @@ const LoginPage: React.FC<Props> = ({ onSuccess }) => {
             }}
           />
           <div className="relative">
-            <div className="w-[52px] h-[52px] rounded-2xl bg-brand-accent/15 border border-brand-accent/25 flex items-center justify-center mb-5">
-              <BrandMark />
+            <div className="w-[52px] h-[52px] rounded-2xl bg-brand-accent/15 border border-brand-accent/25 flex items-center justify-center mb-5 overflow-hidden">
+              {logo ? <img src={logo} alt="Logo" className="w-full h-full object-cover" /> : <BrandMark />}
             </div>
             <h1 className="font-serif-display text-[28px] text-white leading-tight mb-2">
               Sudut Ruang
@@ -98,8 +110,8 @@ const LoginPage: React.FC<Props> = ({ onSuccess }) => {
         <div className="w-full md:w-[380px] p-8 sm:p-10 flex flex-col justify-center bg-white/[0.03]">
           {/* Mobile brand */}
           <div className="md:hidden flex items-center gap-3 mb-6">
-            <div className="w-11 h-11 rounded-xl bg-brand-accent/15 border border-brand-accent/25 flex items-center justify-center">
-              <BrandMark size={22} />
+            <div className="w-11 h-11 rounded-xl bg-brand-accent/15 border border-brand-accent/25 flex items-center justify-center overflow-hidden">
+              {logo ? <img src={logo} alt="Logo" className="w-full h-full object-cover" /> : <BrandMark size={22} />}
             </div>
             <div>
               <h1 className="font-serif-display text-[20px] text-white leading-none">Sudut Ruang</h1>
