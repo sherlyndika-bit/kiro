@@ -57,7 +57,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"id\": \"{{ $json.from }}\",\n  \"client_name\": {{ JSON.stringify($json.clientName) }},\n  \"source\": \"whatsapp\",\n  \"mode\": \"ai\",\n  \"status\": \"active\",\n  \"last_message\": {{ JSON.stringify($json.text) }},\n  \"last_message_at\": \"{{ $now }}\",\n  \"unread_count\": 1,\n  \"updated_at\": \"{{ $now }}\"\n}",
+        "jsonBody": "={\n  \"id\": \"{{ $json.from }}\",\n  \"client_name\": {{ JSON.stringify($json.clientName) }},\n  \"source\": \"whatsapp\",\n  \"status\": \"active\",\n  \"last_message\": {{ JSON.stringify($json.text) }},\n  \"last_message_at\": \"{{ $now }}\",\n  \"unread_count\": 1,\n  \"updated_at\": \"{{ $now }}\"\n}",
         "options": {
           "headers": {
             "entries": [
@@ -179,6 +179,17 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1800, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// GATE: hormati mode percakapan. Kalau operator sudah 'Take Over' (mode=manual),\n// AI BERHENTI membalas. Customer message tetap tersimpan (sudah di-save di awal).\nconst j = $json;\nconst SUPABASE_URL = 'https://wbfqudrzwsnlzevxjlkm.supabase.co';\nconst ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndiZnF1ZHJ6d3NubHpldnhqbGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2OTY2NjUsImV4cCI6MjA5NTI3MjY2NX0.6ceWsWJ2g9ilLdHvKgolh7rKt5X8JEQyBHwDEhGJ4lc';\nlet mode = 'ai';\ntry {\n  const res = await this.helpers.httpRequest({\n    method: 'GET',\n    url: SUPABASE_URL + '/rest/v1/conversations?id=eq.' + encodeURIComponent(j.from) + '&select=mode',\n    headers: { apikey: ANON, Authorization: 'Bearer ' + ANON },\n    json: true\n  });\n  if (Array.isArray(res) && res[0] && res[0].mode) mode = res[0].mode;\n} catch (e) {\n  // Kalau gagal cek mode, default tetap kirim (fail-open) supaya customer tidak ghosting.\n  mode = 'ai';\n}\nif (mode === 'manual') {\n  // Operator sedang menangani manual -> jangan balas otomatis.\n  return [];\n}\nreturn [{ json: { ...j, conversationMode: mode } }];"
+      },
+      "id": "check-mode-gate",
+      "name": "AI Active? (Mode Gate)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1900, 360],
+      "notes": "Cek conversations.mode di Supabase. Kalau 'manual' (operator take over), hentikan auto-reply AI. Kalau 'ai', lanjut kirim."
     },
     {
       "parameters": {
@@ -362,6 +373,11 @@
       "main": [[{ "node": "Build Decision", "type": "main", "index": 0 }]]
     },
     "Build Decision": {
+      "main": [[
+        { "node": "AI Active? (Mode Gate)", "type": "main", "index": 0 }
+      ]]
+    },
+    "AI Active? (Mode Gate)": {
       "main": [[
         { "node": "Save AI Reply", "type": "main", "index": 0 },
         { "node": "Update Conversation Memory", "type": "main", "index": 0 },

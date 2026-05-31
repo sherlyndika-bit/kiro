@@ -60,10 +60,13 @@
     },
     {
       "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "messageType": "text",
         "phoneNumberId": "1052743247932102",
         "recipientPhoneNumber": "={{ $json.from }}",
         "textBody": "={{ 'Halo ' + $json.clientName.split(' ')[0] + ', ini proposal lengkap dari Syifa - Sudut Ruang.\\n\\nNo. Proposal: ' + $json.proposalNo + '\\nTotal Fee: ' + $json.totalFeeFmt + '\\nBerlaku sampai: ' + $json.validUntil + '\\n\\nKalau ada yang perlu didiskusikan, langsung balas aja ya \\uD83D\\uDE0A' }}",
-        "additionalFields": {}
+        "additionalFields": { "previewUrl": false }
       },
       "id": "wa-send-notif",
       "name": "WA — Notif Proposal Siap",
@@ -158,10 +161,13 @@
     },
     {
       "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "messageType": "text",
         "phoneNumberId": "1052743247932102",
         "recipientPhoneNumber": "={{ $json.from }}",
         "textBody": "={{ 'Halo ' + $json.clientName.split(' ')[0] + ', Syifa mau follow up proposal ' + $json.proposalNo + ' yang kita kirim 2 hari lalu.\\n\\nSudah sempat dibaca? Kalau ada pertanyaan atau mau diskusi lebih lanjut, langsung balas aja ya \\uD83D\\uDE0A' }}",
-        "additionalFields": {}
+        "additionalFields": { "previewUrl": false }
       },
       "id": "wa-followup",
       "name": "WA — Auto Follow-up",

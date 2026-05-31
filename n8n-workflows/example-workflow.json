@@ -47,10 +47,13 @@
     },
     {
       "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "messageType": "text",
         "phoneNumberId": "1052743247932102",
         "recipientPhoneNumber": "={{ $json.recipient }}",
         "textBody": "={{ $json.message }}",
-        "additionalFields": {}
+        "additionalFields": { "previewUrl": false }
       },
       "id": "wa-send",
       "name": "Send to WhatsApp",
