@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>SIPKS Jatihandap</title>
+    <link rel="manifest" href="<?= ScriptApp.getService().getUrl() ?>?manifest=true">
+
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+    <style>
+        .material-symbols-outlined { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+
+        /* Animations */
+        .fade-in { animation: fadeIn 0.4s ease-in-out; }
+        .fade-out { animation: fadeOut 0.3s ease-in-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        .pop-in { animation: popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        @keyframes popIn { from { opacity: 0; transform: scale(0.94) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        .slide-up { animation: slideUp 0.45s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        .floaty { animation: float 4s ease-in-out infinite; }
+        @keyframes blob { 0%,100% { transform: translate(0,0) scale(1); } 33% { transform: translate(30px,-30px) scale(1.1); } 66% { transform: translate(-20px,20px) scale(0.95); } }
+        .blob { animation: blob 14s ease-in-out infinite; }
+
+        /* Custom scrollbar */
+        .chat-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .chat-scroll::-webkit-scrollbar-track { background: transparent; }
+        .chat-scroll::-webkit-scrollbar-thumb { background-color: #bec9c4; border-radius: 10px; }
+        .chat-scroll::-webkit-scrollbar-thumb:hover { background-color: #6f7975; }
+
+        /* Toast */
+        #toastWrap { position: fixed; top: 1rem; right: 1rem; z-index: 200; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none; }
+        .toast { animation: toastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1); pointer-events: auto; }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+
+        .glass { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+        .nav-pill { position: relative; }
+        .nav-pill::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 4px; height: 0; border-radius: 0 6px 6px 0; background: #004c3d; transition: height 0.25s ease; }
+        .nav-pill.active-nav::before { height: 60%; }
+        .typing-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; animation: blink 1.4s infinite both; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0%,80%,100% { opacity: 0.2; } 40% { opacity: 1; } }
+    </style>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-low": "#f1f4f3", "primary-fixed-dim": "#85d6be", "tertiary-fixed": "#baeed9", "on-tertiary-fixed-variant": "#1d4f40", "tertiary-container": "#326353", "on-secondary-container": "#745c00", "surface-container-lowest": "#ffffff", "surface-variant": "#e0e3e2", "inverse-surface": "#2d3131", "error-container": "#ffdad6", "on-secondary-fixed": "#241a00", "on-tertiary-fixed": "#002117", "primary-container": "#006653", "secondary-fixed-dim": "#e9c349", "on-tertiary": "#ffffff", "secondary-container": "#fed65b", "on-tertiary-container": "#a9ddc8", "secondary-fixed": "#ffe088", "surface-container-high": "#e6e9e8", "primary": "#004c3d", "on-background": "#181c1c", "on-secondary-fixed-variant": "#574500", "primary-fixed": "#a1f2da", "secondary": "#735c00", "on-error": "#ffffff", "inverse-on-surface": "#eef1f0", "on-primary-fixed-variant": "#005141", "background": "#f7faf9", "on-primary": "#ffffff", "on-surface-variant": "#3f4945", "surface-dim": "#d7dbda", "surface-tint": "#0c6b58", "inverse-primary": "#85d6be", "outline": "#6f7975", "surface": "#f7faf9", "tertiary": "#184b3c", "tertiary-fixed-dim": "#9ed1bd", "surface-bright": "#f7faf9", "surface-container-highest": "#e0e3e2", "on-surface": "#181c1c", "surface-container": "#ebeeed", "on-primary-fixed": "#002019", "on-primary-container": "#90e1c9", "outline-variant": "#bec9c4", "error": "#ba1a1a", "on-secondary": "#ffffff", "on-error-container": "#93000a"
+                    },
+                    "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                    "fontFamily": { "headline-lg": ["Inter"], "title-lg": ["Inter"], "label-md": ["Inter"], "body-lg": ["Inter"], "caption": ["Inter"], "body-md": ["Inter"], "headline-md": ["Inter"] }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md overflow-x-hidden">
+
+    <!-- TOAST CONTAINER -->
+    <div id="toastWrap"></div>
+
+    <!-- ============ LOGIN SCREEN ============ -->
+    <div class="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#003a2e] via-[#004c3d] to-[#00382b]" id="loginScreen">
+        <!-- decorative blobs -->
+        <div class="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-primary-container/40 blur-3xl blob"></div>
+        <div class="absolute -bottom-32 -right-16 w-[28rem] h-[28rem] rounded-full bg-secondary-container/20 blur-3xl blob" style="animation-delay:-5s"></div>
+        <div class="absolute top-1/3 right-1/4 w-72 h-72 rounded-full bg-tertiary-fixed/20 blur-3xl blob" style="animation-delay:-9s"></div>
+
+        <div class="relative bg-white/10 glass border border-white/20 p-8 rounded-[1.75rem] shadow-2xl max-w-md w-full mx-4 text-center pop-in">
+            <div class="inline-flex items-center justify-center w-20 h-20 rounded-[1.5rem] bg-white/15 border border-white/20 mb-5 floaty">
+                <span class="material-symbols-outlined text-primary-fixed text-[44px]" style="font-variation-settings: 'FILL' 1;">account_balance</span>
+            </div>
+            <h1 class="font-headline-lg text-[36px] font-extrabold text-white tracking-tight mb-1">SIPKS</h1>
+            <p class="font-body-md text-primary-fixed-dim/90 mb-7 text-sm">Sistem Informasi Pelayanan Kelurahan Jatihandap</p>
+
+            <div id="loginAlert" class="hidden bg-error-container text-on-error-container text-sm p-3 rounded-xl mb-4 font-body-md text-left border border-error/30"></div>
+
+            <form class="space-y-4 text-left">
+                <div>
+                    <label class="font-label-md text-white/90 block mb-1.5 text-sm font-bold">NIP / ID Admin</label>
+                    <div class="relative">
+                        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-white/60">badge</span>
+                        <input id="loginUser" class="w-full bg-white/10 border border-white/25 text-white placeholder-white/40 rounded-xl pl-11 pr-4 py-3 focus:border-primary-fixed focus:ring-2 focus:ring-primary-fixed/40 font-body-md outline-none transition-all" type="text" placeholder="Masukkan ID">
+                    </div>
+                </div>
+                <div>
+                    <label class="font-label-md text-white/90 block mb-1.5 text-sm font-bold">Password</label>
+                    <div class="relative">
+                        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-white/60">lock</span>
+                        <input id="loginPass" class="w-full bg-white/10 border border-white/25 text-white placeholder-white/40 rounded-xl pl-11 pr-11 py-3 focus:border-primary-fixed focus:ring-2 focus:ring-primary-fixed/40 font-body-md outline-none transition-all" type="password" placeholder="Masukkan Sandi" onkeypress="if(event.key === 'Enter') doLogin()">
+                        <button type="button" onclick="togglePass()" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition-colors">
+                            <span class="material-symbols-outlined text-[20px]" id="eyeIcon">visibility</span>
+                        </button>
+                    </div>
+                </div>
+                <button class="w-full mt-6 bg-primary-fixed text-on-primary-fixed font-label-md font-extrabold py-3.5 rounded-xl hover:bg-white transition-all flex items-center justify-center gap-2 shadow-lg shadow-black/20 active:scale-[0.98]" id="btnLogin" type="button" onclick="doLogin()">
+                    Masuk Sistem <span class="material-symbols-outlined">login</span>
+                </button>
+            </form>
+            <p class="text-white/40 text-[11px] mt-6">© Kelurahan Jatihandap · Pelayanan Terpadu</p>
+        </div>
+    </div>
+
+    <!-- ============ DASHBOARD ============ -->
+    <div class="hidden min-h-screen flex" id="dashboardScreen">
+        <!-- SIDEBAR -->
+        <nav class="bg-surface-container text-primary font-label-md h-screen w-64 hidden md:flex flex-col border-r border-outline-variant fixed left-0 top-0 overflow-y-auto chat-scroll px-4 py-6 z-40">
+            <div class="mb-8 px-2 flex items-center gap-3">
+                <div class="w-11 h-11 rounded-xl bg-primary text-on-primary flex items-center justify-center shadow-md">
+                    <span class="material-symbols-outlined">account_balance</span>
+                </div>
+                <div>
+                    <h2 class="text-[22px] font-extrabold text-primary leading-none">SIPKS</h2>
+                    <p class="text-[11px] text-on-surface-variant mt-1">Kel. Jatihandap</p>
+                </div>
+            </div>
+            <p class="px-2 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/70 mb-2">Menu Utama</p>
+            <div class="flex-1 flex flex-col gap-1.5">
+                <button class="nav-btn nav-pill active-nav w-full flex items-center gap-3 px-4 py-3 text-left bg-secondary-container text-on-secondary-container rounded-xl font-bold transition-all" data-target="view-monitoring" id="navDesktopChat">
+                    <span class="material-symbols-outlined">chat_bubble</span> Monitoring Chat
+                </button>
+                <button class="nav-btn nav-pill w-full flex items-center gap-3 px-4 py-3 text-left text-on-surface-variant hover:bg-surface-variant rounded-xl transition-all" data-target="view-search" id="navDesktopData">
+                    <span class="material-symbols-outlined">search</span> Data Search
+                </button>
+                <button class="nav-btn nav-pill w-full flex items-center gap-3 px-4 py-3 text-left text-on-surface-variant hover:bg-surface-variant rounded-xl transition-all" data-target="view-update" id="navDesktopUpdate">
+                    <span class="material-symbols-outlined">sync</span> Update Status
+                </button>
+            </div>
+            <div class="mt-auto pt-4 border-t border-outline-variant">
+                <div class="bg-surface-container-lowest p-3 rounded-xl mb-3 border border-outline-variant flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center font-extrabold flex-shrink-0" id="avatarDesktop">A</div>
+                    <div class="min-w-0">
+                        <div class="font-bold text-on-surface truncate text-sm" id="infoNamaDesktop">Nama</div>
+                        <div class="text-[11px] text-on-surface-variant truncate" id="infoRoleDesktop">Role</div>
+                    </div>
+                </div>
+                <button onclick="location.reload()" class="w-full bg-error-container text-on-error-container hover:bg-error hover:text-on-error font-bold py-2.5 rounded-xl flex justify-center items-center gap-2 transition-colors">
+                    <span class="material-symbols-outlined text-[18px]">logout</span> Keluar
+                </button>
+            </div>
+        </nav>
+
+        <div class="flex-1 flex flex-col md:ml-64 w-full h-screen overflow-hidden relative">
+            <!-- HEADER -->
+            <header class="bg-surface/80 glass text-primary border-b border-outline-variant flex justify-between items-center w-full px-6 py-3.5 sticky top-0 z-30">
+                <div class="flex items-center gap-2 md:hidden">
+                    <div class="w-8 h-8 rounded-lg bg-primary text-on-primary flex items-center justify-center">
+                        <span class="material-symbols-outlined text-[20px]">account_balance</span>
+                    </div>
+                    <span class="font-extrabold text-primary">SIPKS</span>
+                </div>
+                <div class="hidden md:flex flex-1 flex-col">
+                    <h1 class="font-bold text-on-surface text-[17px]" id="pageTitle">Monitoring Chat</h1>
+                    <p class="font-label-md text-on-surface-variant text-[12px] flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[15px]">verified</span> Layanan Terpadu Terintegrasi WhatsApp
+                    </p>
+                </div>
+                <div class="flex items-center gap-2 ml-auto">
+                    <span class="hidden md:flex items-center gap-1.5 text-[12px] font-bold text-primary bg-tertiary-fixed/60 px-3 py-1.5 rounded-full">
+                        <span class="w-2 h-2 rounded-full bg-primary inline-block animate-pulse"></span> Online
+                    </span>
+                    <button onclick="refreshData()" class="p-2.5 flex items-center gap-2 rounded-full text-on-surface-variant hover:bg-surface-variant hover:text-primary transition-colors">
+                        <span class="material-symbols-outlined" id="syncIcon">refresh</span> <span class="hidden md:block font-bold text-sm">Sync</span>
+                    </button>
+                </div>
+            </header>
+
+            <main class="flex-1 overflow-y-auto chat-scroll bg-background p-4 md:p-6 pb-24 md:pb-6 relative">
+
+                <!-- ===== VIEW: MONITORING CHAT ===== -->
+                <div class="view-panel fade-in h-full flex flex-col md:flex-row gap-4" id="view-monitoring">
+
+                    <div class="w-full md:w-1/3 bg-surface-container-lowest border border-outline-variant rounded-2xl flex flex-col overflow-hidden h-[50vh] md:h-full shadow-sm">
+                        <div class="p-4 border-b border-outline-variant bg-surface-container-low">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="font-bold text-on-surface flex items-center gap-2"><span class="material-symbols-outlined text-primary text-[20px]">groups</span> Daftar Warga</h3>
+                                <span class="text-[11px] font-bold bg-primary-container text-on-primary-container px-2.5 py-1 rounded-full" id="contactCount">0</span>
+                            </div>
+                            <div class="relative">
+                                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-on-surface-variant">search</span>
+                                <input id="contactSearch" oninput="filterKontak()" class="w-full bg-surface border border-outline-variant rounded-xl pl-10 pr-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none" placeholder="Cari nomor warga...">
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-y-auto chat-scroll" id="contactList">
+                            <div class="p-6 text-center text-on-surface-variant text-sm">Memuat riwayat chat...</div>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 bg-surface-container-lowest border border-outline-variant rounded-2xl flex flex-col overflow-hidden h-[60vh] md:h-full relative shadow-sm">
+                        <div class="p-4 border-b border-outline-variant bg-surface flex items-center gap-3">
+                            <div class="w-11 h-11 rounded-full bg-tertiary-fixed flex-shrink-0 flex items-center justify-center text-on-tertiary-fixed font-bold" id="chatHeaderAvatar">
+                                <span class="material-symbols-outlined">person</span>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-on-surface" id="chatHeaderTitle">Pilih Kontak</h3>
+                                <p class="text-[12px] text-on-surface-variant flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-primary inline-block"></span> Terhubung ke SIPKS</p>
+                            </div>
+                        </div>
+                        <div id="chatBox" class="flex-1 overflow-y-auto chat-scroll p-4 flex flex-col gap-3 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')] bg-surface-container-low">
+                            <div class="flex flex-col items-center justify-center h-full text-center text-on-surface-variant gap-3">
+                                <div class="w-20 h-20 rounded-full bg-surface-container-high flex items-center justify-center floaty">
+                                    <span class="material-symbols-outlined text-[40px] text-outline">forum</span>
+                                </div>
+                                <p class="text-sm font-bold text-on-surface">Belum ada percakapan dipilih</p>
+                                <p class="text-xs max-w-xs">Pilih kontak warga di sebelah kiri untuk melihat riwayat percakapan dan membalas.</p>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-surface border-t border-outline-variant flex items-end gap-2" id="chatInputArea" style="display:none;">
+                            <div class="flex-1 bg-surface-container-low border border-outline-variant rounded-2xl overflow-hidden focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30 transition-all">
+                                <input id="adminMessage" class="w-full bg-transparent border-none p-3 focus:ring-0 outline-none text-sm" placeholder="Ketik balasan manual ke warga..." onkeypress="if(event.key === 'Enter') kirimPesan()"/>
+                            </div>
+                            <button id="btnSend" onclick="kirimPesan()" class="p-3 bg-primary text-on-primary rounded-full hover:bg-primary-container transition-colors shadow-md active:scale-95"><span class="material-symbols-outlined">send</span></button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== VIEW: DATA SEARCH ===== -->
+                <div class="view-panel hidden fade-in h-full flex flex-col" id="view-search">
+                    <div class="mb-5 flex flex-col gap-4">
+                        <div>
+                            <h2 class="text-[26px] font-extrabold text-on-surface tracking-tight">Pencarian & Filter Data</h2>
+                            <p class="text-on-surface-variant mt-1 text-sm">Cari arsip berdasarkan Resi/NIK/Nama, atau kosongkan kotak pencarian lalu klik Cari untuk memuat semua data.</p>
+                        </div>
+
+                        <!-- STAT CARDS -->
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="statCards">
+                            <div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div class="w-11 h-11 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center"><span class="material-symbols-outlined">inbox</span></div>
+                                <div><div class="text-[22px] font-extrabold text-on-surface leading-none" id="statTotal">0</div><div class="text-[11px] text-on-surface-variant mt-1">Total Arsip</div></div>
+                            </div>
+                            <div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div class="w-11 h-11 rounded-xl bg-secondary-container text-on-secondary-container flex items-center justify-center"><span class="material-symbols-outlined">hourglass_top</span></div>
+                                <div><div class="text-[22px] font-extrabold text-on-surface leading-none" id="statProses">0</div><div class="text-[11px] text-on-surface-variant mt-1">Diproses</div></div>
+                            </div>
+                            <div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div class="w-11 h-11 rounded-xl bg-tertiary-fixed text-on-tertiary-fixed-variant flex items-center justify-center"><span class="material-symbols-outlined">task_alt</span></div>
+                                <div><div class="text-[22px] font-extrabold text-on-surface leading-none" id="statSelesai">0</div><div class="text-[11px] text-on-surface-variant mt-1">Selesai</div></div>
+                            </div>
+                            <div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div class="w-11 h-11 rounded-xl bg-error-container text-on-error-container flex items-center justify-center"><span class="material-symbols-outlined">cancel</span></div>
+                                <div><div class="text-[22px] font-extrabold text-on-surface leading-none" id="statTolak">0</div><div class="text-[11px] text-on-surface-variant mt-1">Ditolak</div></div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col md:flex-row gap-3 items-end bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant shadow-sm">
+                            <div class="w-full md:w-1/3">
+                                <label class="text-[12px] text-on-surface-variant mb-1 block font-bold">Kata Kunci</label>
+                                <div class="relative w-full">
+                                    <input id="inputCari" class="w-full bg-surface border border-outline-variant rounded-xl pl-10 pr-4 py-2.5 focus:border-primary focus:ring-1 focus:ring-primary outline-none" placeholder="Ketik lalu tekan enter..." type="text" onkeypress="if(event.key === 'Enter') jalankanPencarian()"/>
+                                    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-on-surface-variant">search</span>
+                                </div>
+                            </div>
+
+                            <div class="w-full md:w-1/4">
+                                <label class="text-[12px] text-on-surface-variant mb-1 block font-bold">Jenis Ajuan</label>
+                                <div class="relative">
+                                    <select id="filterLayanan" onchange="terapkanFilter()" class="w-full bg-surface border border-outline-variant rounded-xl px-4 py-2.5 focus:border-primary outline-none appearance-none">
+                                        <option value="">Semua Layanan</option>
+                                        <option value="DTSEN">DTSEN</option>
+                                        <option value="BANSOS">Usulan Bansos</option>
+                                        <option value="PMKS">Pengaduan PMKS</option>
+                                        <option value="PKH">Surat Keterangan PKH</option>
+                                    </select>
+                                    <span class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">arrow_drop_down</span>
+                                </div>
+                            </div>
+
+                            <div class="w-full md:w-1/4">
+                                <label class="text-[12px] text-on-surface-variant mb-1 block font-bold">Status Resi</label>
+                                <div class="relative">
+                                    <select id="filterStatus" onchange="terapkanFilter()" class="w-full bg-surface border border-outline-variant rounded-xl px-4 py-2.5 focus:border-primary outline-none appearance-none">
+                                        <option value="">Semua Status</option>
+                                        <option value="S1">S1 - Diterima</option>
+                                        <option value="S2">S2 - Sedang Diproses</option>
+                                        <option value="S3">S3 - Diteruskan Ke Dinas</option>
+                                        <option value="S4">S4 - Selesai</option>
+                                        <option value="S5">S5 - Ditolak</option>
+                                    </select>
+                                    <span class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">arrow_drop_down</span>
+                                </div>
+                            </div>
+
+                            <button id="btnCari" onclick="jalankanPencarian()" class="w-full md:w-auto bg-primary text-on-primary px-6 py-2.5 rounded-xl hover:bg-primary-container transition-colors font-bold flex items-center justify-center gap-2 h-[44px] active:scale-95">
+                                <span class="material-symbols-outlined text-[18px]">search</span> Cari
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-surface-container-lowest border border-outline-variant rounded-2xl overflow-x-auto shadow-sm flex-1">
+                        <table class="w-full text-left border-collapse min-w-[800px]">
+                            <thead>
+                                <tr class="bg-primary-container text-on-primary-container text-sm border-b border-outline-variant">
+                                    <th class="p-3.5 font-bold">No Resi</th>
+                                    <th class="p-3.5 font-bold">Layanan</th>
+                                    <th class="p-3.5 font-bold">No KK / NIK</th>
+                                    <th class="p-3.5 font-bold">Nama Pemohon</th>
+                                    <th class="p-3.5 font-bold">Tanggal</th>
+                                    <th class="p-3.5 font-bold">Status Berkas</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-sm text-on-surface" id="tabelHasilCari">
+                                <tr><td colspan="6" class="text-center p-10 text-on-surface-variant">
+                                    <div class="flex flex-col items-center gap-2">
+                                        <span class="material-symbols-outlined text-[40px] text-outline">database</span>
+                                        Belum ada data. Klik tombol <b>Cari</b> untuk memuat arsip.
+                                    </div>
+                                </td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ===== VIEW: UPDATE STATUS ===== -->
+                <div class="view-panel hidden fade-in h-full" id="view-update">
+                    <div class="max-w-md mx-auto mt-6 bg-surface-container-lowest border border-outline-variant rounded-2xl p-6 shadow-sm slide-up">
+                        <div class="flex items-center gap-3 mb-6 border-b border-outline-variant pb-4">
+                            <div class="w-11 h-11 bg-secondary-container text-on-secondary-container rounded-xl flex items-center justify-center">
+                                <span class="material-symbols-outlined">sync</span>
+                            </div>
+                            <div>
+                                <h2 class="font-bold text-on-surface text-[18px]">Update Status Manual</h2>
+                                <p class="text-[12px] text-on-surface-variant">Perbarui status berkas warga ke server</p>
+                            </div>
+                        </div>
+                        <form class="space-y-4">
+                            <div>
+                                <label class="font-bold text-sm text-on-surface block mb-1.5">Nomor Resi / No KK</label>
+                                <div class="relative">
+                                    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-on-surface-variant">tag</span>
+                                    <input id="inputUpdateNomor" class="w-full bg-surface border-outline-variant border rounded-xl pl-11 pr-4 py-2.5 focus:border-primary focus:ring-1 focus:ring-primary outline-none" placeholder="Contoh: RES-1234..." type="text"/>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="font-bold text-sm text-on-surface block mb-1.5">Status Baru</label>
+                                <div class="relative">
+                                    <select id="inputUpdateStatus" class="w-full bg-surface border-outline-variant border rounded-xl px-4 py-2.5 focus:border-primary outline-none appearance-none">
+                                        <option value="S1 - Data Diterima Kelurahan">S1 - Data Diterima Kelurahan</option>
+                                        <option value="S2 - Sedang Diproses">S2 - Sedang Diproses</option>
+                                        <option value="S3 - Diteruskan ke Dinas">S3 - Diteruskan ke Dinas</option>
+                                        <option value="S4 - Berkas Selesai">S4 - Berkas Selesai</option>
+                                        <option value="S5 - Berkas Ditolak / Tidak Lengkap">S5 - Berkas Ditolak / Tidak Lengkap</option>
+                                    </select>
+                                    <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">arrow_drop_down</span>
+                                </div>
+                            </div>
+                            <div class="pt-2 border-t border-outline-variant mt-6">
+                                <button id="btnUpdate" onclick="jalankanUpdate()" class="w-full bg-primary text-on-primary font-bold py-3 rounded-xl hover:bg-primary-container transition-colors flex items-center justify-center gap-2 active:scale-[0.98]" type="button">
+                                    Simpan Perubahan <span class="material-symbols-outlined">cloud_upload</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+
+        <!-- MOBILE NAV -->
+        <nav class="bg-surface/90 glass text-primary md:hidden border-t border-outline-variant shadow-lg fixed bottom-0 left-0 w-full h-16 z-50 flex justify-around items-center px-4">
+            <button class="nav-btn-mobile active-nav-mobile flex flex-col items-center justify-center bg-secondary-container text-on-secondary-container rounded-full px-4 py-1 transition-all" data-target="view-monitoring" id="navMobileChat">
+                <span class="material-symbols-outlined text-[24px]">chat_bubble</span><span class="text-[10px] font-bold">Chat</span>
+            </button>
+            <button class="nav-btn-mobile flex flex-col items-center justify-center text-on-surface-variant w-16 transition-all" data-target="view-search" id="navMobileData">
+                <span class="material-symbols-outlined text-[24px]">search</span><span class="text-[10px]">Data</span>
+            </button>
+            <button class="nav-btn-mobile flex flex-col items-center justify-center text-on-surface-variant w-16 transition-all" data-target="view-update" id="navMobileUpdate">
+                <span class="material-symbols-outlined text-[24px]">sync</span><span class="text-[10px]">Update</span>
+            </button>
+        </nav>
+    </div>
+
+    <script>
+        let userData = {};
+        let masterDataPencarian = []; // Menyimpan data asli dari server untuk keperluan Filter
+
+        const PAGE_TITLES = { 'view-monitoring': 'Monitoring Chat', 'view-search': 'Pencarian Data', 'view-update': 'Update Status' };
+
+        // ====== TOAST HELPER ======
+        function showToast(pesan, tipe) {
+            tipe = tipe || 'info';
+            const map = {
+                success: { bg: 'bg-primary', icon: 'check_circle' },
+                error:   { bg: 'bg-error', icon: 'error' },
+                info:    { bg: 'bg-inverse-surface', icon: 'info' }
+            };
+            const cfg = map[tipe] || map.info;
+            const wrap = document.getElementById('toastWrap');
+            const el = document.createElement('div');
+            el.className = `toast ${cfg.bg} text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 max-w-xs text-sm font-bold`;
+            el.innerHTML = `<span class="material-symbols-outlined text-[20px]">${cfg.icon}</span><span class="font-body-md font-medium">${pesan}</span>`;
+            wrap.appendChild(el);
+            setTimeout(() => { el.classList.add('fade-out'); setTimeout(() => el.remove(), 300); }, 3500);
+        }
+
+        function togglePass() {
+            const inp = document.getElementById('loginPass');
+            const eye = document.getElementById('eyeIcon');
+            if (inp.type === 'password') { inp.type = 'text'; eye.innerText = 'visibility_off'; }
+            else { inp.type = 'password'; eye.innerText = 'visibility'; }
+        }
+
+        function getInitials(str) {
+            if (!str) return '?';
+            const parts = str.trim().split(' ').filter(function(p){ return p.length > 0; });
+            if (parts.length === 0) return '?';
+            if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+            return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        }
+
+        // Ubah baris baru jadi <br> tanpa memakai \n (anti-rusak saat copy-paste)
+        function nl2br(s) {
+            return (s || '').split(String.fromCharCode(10)).join('<br>');
+        }
+
+        // 1. SISTEM LOGIN
+        function doLogin() {
+            const user = document.getElementById('loginUser').value.trim();
+            const pass = document.getElementById('loginPass').value.trim();
+            const btn = document.getElementById('btnLogin');
+            const alertBox = document.getElementById('loginAlert');
+
+            if(!user || !pass) { alertBox.innerText = "NIP dan Password wajib diisi!"; alertBox.classList.remove('hidden'); return; }
+
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin">progress_activity</span> Memverifikasi...'; btn.disabled = true;
+
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    if(res.sukses) {
+                        userData = res;
+                        mintaIzinNotif();
+                        document.getElementById('loginScreen').classList.add('fade-out');
+                        setTimeout(() => {
+                            document.getElementById('loginScreen').classList.add('hidden');
+                            document.getElementById('dashboardScreen').classList.remove('hidden');
+                            document.getElementById('dashboardScreen').classList.add('fade-in');
+                            setupDashboard();
+                        }, 300);
+                    } else {
+                        btn.innerHTML = 'Masuk Sistem <span class="material-symbols-outlined">login</span>'; btn.disabled = false;
+                        alertBox.innerText = res.pesan; alertBox.classList.remove('hidden');
+                    }
+                })
+                .withFailureHandler(function(err) {
+                    btn.innerHTML = 'Masuk Sistem <span class="material-symbols-outlined">login</span>'; btn.disabled = false;
+                    alertBox.innerHTML = `<strong>Error Server/Koneksi:</strong><br/>${err.message}<br/><br/><em>*Pastikan saat Deploy aplikasi diatur 'Execute as: Me' dan 'Access: Anyone'.</em>`;
+                    alertBox.classList.remove('hidden');
+                })
+                .verifikasiLogin(user, pass);
+        }
+
+        function setupDashboard() {
+            document.getElementById('infoNamaDesktop').innerText = userData.nama;
+            document.getElementById('infoRoleDesktop').innerText = userData.role;
+            document.getElementById('avatarDesktop').innerText = getInitials(userData.nama);
+
+            if(userData.role === 'Petugas Lapangan') {
+                document.getElementById('navDesktopChat').style.display = 'none';
+                document.getElementById('navMobileChat').style.display = 'none';
+                switchTab('view-search');
+            } else {
+                switchTab('view-monitoring');
+                loadChatData();
+            }
+            showToast('Selamat datang, ' + (userData.nama || 'Admin') + '!', 'success');
+        }
+
+        // 2. NAVIGASI TAB MENU
+        function switchTab(targetId) {
+            document.querySelectorAll('.view-panel').forEach(panel => panel.classList.add('hidden'));
+            const target = document.getElementById(targetId);
+            target.classList.remove('hidden');
+            target.classList.remove('fade-in'); void target.offsetWidth; target.classList.add('fade-in');
+
+            const titleEl = document.getElementById('pageTitle');
+            if (titleEl && PAGE_TITLES[targetId]) titleEl.innerText = PAGE_TITLES[targetId];
+
+            const dtActive = ['bg-secondary-container', 'text-on-secondary-container', 'font-bold', 'active-nav'];
+            const dtInactive = ['text-on-surface-variant', 'hover:bg-surface-variant'];
+            document.querySelectorAll('#dashboardScreen .nav-btn').forEach(btn => {
+                if (btn.dataset.target === targetId) {
+                    btn.classList.remove(...dtInactive); btn.classList.add(...dtActive);
+                } else {
+                    btn.classList.remove(...dtActive); btn.classList.add(...dtInactive);
+                }
+            });
+
+            const mobActive = ['bg-secondary-container', 'text-on-secondary-container', 'rounded-full', 'px-4', 'py-1'];
+            document.querySelectorAll('#dashboardScreen .nav-btn-mobile').forEach(btn => {
+                if (btn.dataset.target === targetId) {
+                    btn.classList.add(...mobActive); btn.classList.remove('w-16', 'text-on-surface-variant');
+                    btn.querySelector('span:last-child').classList.add('font-bold');
+                } else {
+                    btn.classList.remove(...mobActive); btn.classList.add('w-16', 'text-on-surface-variant');
+                    btn.querySelector('span:last-child').classList.remove('font-bold');
+                }
+            });
+        }
+
+        document.querySelectorAll('.nav-btn, .nav-btn-mobile').forEach(btn => {
+            btn.addEventListener('click', () => switchTab(btn.dataset.target));
+        });
+
+        function refreshData() {
+            let icon = document.getElementById('syncIcon');
+            icon.classList.add('animate-spin');
+            if(userData.role !== 'Petugas Lapangan') loadChatData();
+
+            if(!document.getElementById('view-search').classList.contains('hidden')){
+                jalankanPencarian();
+            }
+            setTimeout(() => icon.classList.remove('animate-spin'), 1500);
+        }
+
+        // 3. LOGIKA CHAT WAWANCARA
+        let allChats = {}; let currentActiveNumber = ""; let urutanNomor = [];
+
+        function loadChatData() {
+            google.script.run.withSuccessHandler(function(data) {
+                if (Object.keys(allChats).length > 0) { console.log("Data diperbarui..."); }
+                processChatData(data);
+            }).getSemuaDataChat();
+        }
+
+        function processChatData(data) {
+            allChats = {}; let uniqueNumbers = [];
+            data.forEach(row => {
+                let tgl = row[0]; let jam = row[1]; let noWa = row[2]; let sender = row[3]; let text = row[4];
+                if (!noWa || noWa.trim() === "") return;
+                if (!allChats[noWa]) { allChats[noWa] = []; uniqueNumbers.push(noWa); }
+                allChats[noWa].push({ tgl, jam, sender, text });
+            });
+            urutanNomor = uniqueNumbers.reverse();
+            document.getElementById('contactCount').innerText = urutanNomor.length;
+            renderContactList(urutanNomor);
+            if(currentActiveNumber) openChat(currentActiveNumber);
+        }
+
+        function filterKontak() {
+            const q = document.getElementById('contactSearch').value.trim().toLowerCase();
+            const filtered = urutanNomor.filter(no => no.toLowerCase().includes(q));
+            renderContactList(filtered);
+        }
+
+        function renderContactList(numbers) {
+            if (!numbers || numbers.length === 0) {
+                document.getElementById('contactList').innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-12 text-center text-on-surface-variant gap-2 px-4">
+                        <span class="material-symbols-outlined text-[36px] text-outline">person_off</span>
+                        <p class="text-sm">Belum ada warga yang menghubungi.</p>
+                    </div>`;
+                return;
+            }
+            let html = '';
+            numbers.forEach(no => {
+                let isActive = (no === currentActiveNumber);
+                let activeCls = isActive ? 'bg-tertiary-fixed/40 border-l-4 border-primary' : 'border-l-4 border-transparent hover:bg-surface';
+                let lastMsg = allChats[no][allChats[no].length-1];
+                let teksSingkat = lastMsg.text.length > 32 ? lastMsg.text.substring(0, 32) + "..." : lastMsg.text;
+                let total = allChats[no].length;
+
+                html += `
+                <div class="px-3 py-3 border-b border-outline-variant cursor-pointer flex gap-3 items-center transition-all ${activeCls}" onclick="openChat('${no}')">
+                    <div class="w-11 h-11 rounded-full bg-primary-container text-on-primary-container flex-shrink-0 flex items-center justify-center font-bold text-sm">
+                        ${getInitials(no)}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-baseline mb-0.5">
+                            <h4 class="font-bold text-sm text-on-surface truncate">${no}</h4>
+                            <span class="text-[10px] text-on-surface-variant flex-shrink-0 ml-2">${lastMsg.jam}</span>
+                        </div>
+                        <div class="flex justify-between items-center gap-2">
+                            <p class="text-[13px] text-on-surface-variant truncate">${teksSingkat}</p>
+                            <span class="text-[10px] font-bold bg-surface-variant text-on-surface-variant px-1.5 py-0.5 rounded-full flex-shrink-0">${total}</span>
+                        </div>
+                    </div>
+                </div>`;
+            });
+            document.getElementById('contactList').innerHTML = html;
+        }
+
+        function openChat(noWa) {
+            currentActiveNumber = noWa;
+            renderContactList(urutanNomor.length ? urutanNomor : Object.keys(allChats).reverse());
+
+            document.getElementById('chatHeaderTitle').innerHTML = noWa;
+            document.getElementById('chatHeaderAvatar').innerHTML = getInitials(noWa);
+            document.getElementById('chatInputArea').style.display = 'flex';
+
+            let chatHtml = '';
+            allChats[noWa].forEach(msg => {
+                let isWarga = msg.sender.includes('Warga');
+                let isAdmin = msg.sender.includes('Admin');
+                let isBot = !isWarga && !isAdmin;
+
+                if(isWarga) {
+                    chatHtml += `
+                    <div class="flex justify-start max-w-[85%] slide-up">
+                        <div class="bg-surface-container-lowest border border-outline-variant text-on-surface p-3 rounded-2xl rounded-tl-md shadow-sm relative">
+                            <div class="text-xs text-primary mb-1 font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">person</span> Warga</div>
+                            <p class="text-sm">${nl2br(msg.text)}</p>
+                            <span class="text-[10px] text-on-surface-variant text-right block mt-1">${msg.tgl} ${msg.jam}</span>
+                        </div>
+                    </div>`;
+                } else if(isBot) {
+                    chatHtml += `
+                    <div class="flex justify-start max-w-[85%] slide-up">
+                        <div class="bg-tertiary-fixed text-on-tertiary-fixed-variant p-3 rounded-2xl rounded-tl-md shadow-sm relative">
+                            <div class="text-xs text-tertiary mb-1 font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">smart_toy</span> Sistem Bot AI</div>
+                            <p class="text-sm">${nl2br(msg.text)}</p>
+                            <span class="text-[10px] opacity-70 text-right block mt-1">${msg.tgl} ${msg.jam}</span>
+                        </div>
+                    </div>`;
+                } else {
+                    chatHtml += `
+                    <div class="flex justify-end max-w-[85%] ml-auto slide-up">
+                        <div class="bg-primary text-on-primary p-3 rounded-2xl rounded-tr-md shadow-sm relative">
+                            <div class="text-xs opacity-90 mb-1 font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">support_agent</span> ${msg.sender}</div>
+                            <p class="text-sm">${nl2br(msg.text)}</p>
+                            <span class="text-[10px] opacity-80 text-right block mt-1 flex items-center justify-end gap-1"><span class="material-symbols-outlined text-[12px]">done_all</span> ${msg.tgl} ${msg.jam}</span>
+                        </div>
+                    </div>`;
+                }
+            });
+            let box = document.getElementById('chatBox');
+            box.innerHTML = chatHtml;
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function kirimPesan() {
+            let msgInput = document.getElementById('adminMessage');
+            let text = msgInput.value.trim();
+            let btn = document.getElementById('btnSend');
+            if (!text || !currentActiveNumber) return;
+
+            msgInput.disabled = true; btn.innerHTML = '<span class="material-symbols-outlined animate-spin">progress_activity</span>';
+            google.script.run.withSuccessHandler(function(res) {
+                msgInput.value = ''; msgInput.disabled = false; btn.innerHTML = '<span class="material-symbols-outlined">send</span>';
+                showToast('Pesan terkirim ke warga', 'success');
+                loadChatData();
+            }).withFailureHandler(function(err){
+                msgInput.disabled = false; btn.innerHTML = '<span class="material-symbols-outlined">send</span>';
+                showToast('Gagal mengirim: ' + err.message, 'error');
+            }).balasDariDashboard(currentActiveNumber, text, userData.nama);
+        }
+
+        // 4. LOGIKA PENCARIAN & FILTER DROPDOWN DATA
+        function jalankanPencarian() {
+            let keyword = document.getElementById('inputCari').value.trim();
+            let btn = document.getElementById('btnCari');
+
+            let queryBackend = keyword === "" ? " " : keyword;
+
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">progress_activity</span> Memuat...';
+
+            google.script.run.withSuccessHandler(function(hasil) {
+                btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">search</span> Cari';
+                masterDataPencarian = hasil;
+                hitungStatistik(hasil);
+                terapkanFilter();
+            }).withFailureHandler(function(err){
+                btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">search</span> Cari';
+                showToast('Gagal menarik data: ' + err.message, 'error');
+            }).cariDataWarga(queryBackend);
+        }
+
+        function hitungStatistik(data) {
+            let total = data.length, proses = 0, selesai = 0, tolak = 0;
+            data.forEach(row => {
+                let s = (row.status || '').toLowerCase();
+                if (s.includes('selesai')) selesai++;
+                else if (s.includes('ditolak')) tolak++;
+                else proses++;
+            });
+            document.getElementById('statTotal').innerText = total;
+            document.getElementById('statProses').innerText = proses;
+            document.getElementById('statSelesai').innerText = selesai;
+            document.getElementById('statTolak').innerText = tolak;
+        }
+
+        function terapkanFilter() {
+            let tbody = document.getElementById('tabelHasilCari');
+
+            let valLayanan = document.getElementById('filterLayanan').value.toLowerCase();
+            let valStatus = document.getElementById('filterStatus').value.toLowerCase();
+
+            let dataSaring = masterDataPencarian.filter(row => {
+                let passLayanan = (valLayanan === "" || row.layanan.toLowerCase().includes(valLayanan));
+                let passStatus = (valStatus === "" || row.status.toLowerCase().includes(valStatus));
+                return passLayanan && passStatus;
+            });
+
+            if(dataSaring.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center text-on-surface-variant p-10">
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="material-symbols-outlined text-[40px] text-outline">search_off</span>
+                        Data arsip dengan kriteria tersebut tidak ditemukan.
+                    </div>
+                </td></tr>`;
+                return;
+            }
+
+            let html = '';
+            dataSaring.forEach(row => {
+                let badgeClass = row.status.includes('Selesai') ? 'bg-primary-container text-on-primary-container' :
+                                 (row.status.includes('Ditolak') ? 'bg-error-container text-on-error-container' : 'bg-secondary-container text-on-secondary-container');
+                let dot = row.status.includes('Selesai') ? 'bg-primary' : (row.status.includes('Ditolak') ? 'bg-error' : 'bg-secondary');
+                html += `
+                <tr class="border-b border-outline-variant hover:bg-tertiary-fixed/20 cursor-pointer transition-colors" onclick="pindahUpdateStatus('${row.resi}')" title="Klik untuk Update Status">
+                    <td class="p-3.5 font-bold text-primary">${row.resi}</td>
+                    <td class="p-3.5"><span class="bg-surface-variant text-on-surface text-[11px] font-bold px-2 py-1 rounded-lg">${row.layanan}</span></td>
+                    <td class="p-3.5 font-mono text-xs text-on-surface-variant">${row.kk}</td>
+                    <td class="p-3.5 capitalize font-medium">${row.nama}</td>
+                    <td class="p-3.5 text-xs text-on-surface-variant">${row.tgl}</td>
+                    <td class="p-3.5"><span class="${badgeClass} text-[11px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap inline-flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full ${dot}"></span>${row.status}</span></td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+
+        function pindahUpdateStatus(nomorResi) {
+            document.getElementById('inputUpdateNomor').value = nomorResi;
+            switchTab('view-update');
+        }
+
+        function jalankanUpdate() {
+            let nomor = document.getElementById('inputUpdateNomor').value.trim();
+            let statusBaru = document.getElementById('inputUpdateStatus').value;
+            let btn = document.getElementById('btnUpdate');
+
+            if(!nomor) { showToast('Nomor Resi / NIK wajib diisi!', 'error'); return; }
+
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin">progress_activity</span> Memproses...'; btn.disabled = true;
+
+            google.script.run.withSuccessHandler(function(berhasil) {
+                btn.innerHTML = 'Simpan Perubahan <span class="material-symbols-outlined">cloud_upload</span>'; btn.disabled = false;
+                if(berhasil) {
+                    showToast('Dokumen ' + nomor + ' berhasil diperbarui', 'success');
+                    document.getElementById('inputUpdateNomor').value = '';
+                } else {
+                    showToast('Resi/NIK ' + nomor + ' tidak ditemukan di Master Database', 'error');
+                }
+            }).withFailureHandler(function(err){
+                btn.innerHTML = 'Simpan Perubahan <span class="material-symbols-outlined">cloud_upload</span>'; btn.disabled = false;
+                showToast('Gagal memperbarui: ' + err.message, 'error');
+            }).updateStatusResi(nomor, statusBaru);
+        }
+
+        // NOTIFIKASI
+        function mintaIzinNotif() {
+            if ("Notification" in window && Notification.permission !== "denied") {
+                Notification.requestPermission();
+            }
+        }
+
+        function munculkanNotif(pesan) {
+            if (Notification.permission === "granted") {
+                new Notification("Pesan Baru SIPKS", {
+                    body: pesan,
+                    icon: 'https://cdn-icons-png.flaticon.com/512/3062/3062634.png'
+                });
+            }
+        }
+    </script>
+</body>
+</html>
