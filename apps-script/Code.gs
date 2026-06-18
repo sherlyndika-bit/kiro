@@ -538,7 +538,7 @@ function doGet(e) {
   }
   return HtmlService.createTemplateFromFile('Dashboard')
     .evaluate()
-    .setTitle('SIPKS Jatihandap')
+    .setTitle('SIPROSA Jatihandap')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1');
 }
 
